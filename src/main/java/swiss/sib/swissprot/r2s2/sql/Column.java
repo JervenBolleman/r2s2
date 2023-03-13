@@ -3,11 +3,14 @@ package swiss.sib.swissprot.r2s2.sql;
 import java.sql.SQLException;
 
 import org.duckdb.DuckDBAppender;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 
 public class Column {
-	public String name;
-	public Datatypes datatype;
-
+	private final String name;
+	private final Datatypes datatype;
+	private final Model model = new LinkedHashModel();
+	
 	public Column(String name, Datatypes datatype) {
 		this.name = name;
 		this.datatype = datatype;
@@ -19,5 +22,17 @@ public class Column {
 
 	public void add(int tempGraphId, DuckDBAppender appender) throws SQLException {
 		appender.append(tempGraphId);
+	}
+
+	public String name() {
+		return name;
+	}
+
+	public Datatypes datatype() {
+		return datatype;
+	}
+
+	public Model model() {
+		return model;
 	}
 }

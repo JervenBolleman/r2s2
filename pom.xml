@@ -8,6 +8,8 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<rdf4j.version>[4,)</rdf4j.version>
 		<slf4j.version>[1.7,)</slf4j.version>
+		<ontop.version>[5.0,)</ontop.version>
+		<duckdb.version>[0-6,)</duckdb.version>
 		<maven.compiler.release>17</maven.compiler.release>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
@@ -101,15 +103,16 @@
 			<version>${slf4j.version}</version>
 			<optional>true</optional>
 		</dependency>
-
-
-<dependency>
- <groupId>org.duckdb</groupId>
- <artifactId>duckdb_jdbc</artifactId>
- <version>0.6.1</version>
-</dependency>
-
-
+		<dependency>
+			<groupId>org.duckdb</groupId>
+			<artifactId>duckdb_jdbc</artifactId>
+			<version>${duckdb.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>it.unibz.inf.ontop</groupId>
+			<artifactId>ontop</artifactId>
+			<version>${ontop.version}</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>
@@ -137,9 +140,9 @@
 						</goals>
 						<configuration>
 							<shadedArtifactAttached>true</shadedArtifactAttached>
-					                <shadedClassifierName>uber</shadedClassifierName>
+							<shadedClassifierName>uber</shadedClassifierName>
 							<transformers>
-								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
 									<mainClass>swiss.sib.swissprot.sail.readonly.WriteOnce</mainClass>
 								</transformer>
@@ -171,7 +174,9 @@
 						<additionalConfig>
 							<file>
 								<name>.settings/org.eclipse.core.resources.prefs</name>
-								<content><![CDATA[eclipse.preferences.version=1${line.separator}encoding/<project>=${project.build.sourceEncoding}${line.separator}]]></content>
+								<content>
+									<![CDATA[eclipse.preferences.version=1${line.separator}encoding/<project>=${project.build.sourceEncoding}${line.separator}]]>
+								</content>
 							</file>
 						</additionalConfig>
 					</configuration>

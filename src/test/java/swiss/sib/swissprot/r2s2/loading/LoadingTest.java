@@ -10,8 +10,10 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.stream.Stream;
 
+import org.duckdb.DuckDBDatabase;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -31,7 +33,8 @@ public class LoadingTest {
 
 	@Test
 	public void simpleTest() throws IOException, SQLException {
-		File newFolder = temp.newFile("duckdb");
+		File newFolder = temp.newFile("f");
+		newFolder.delete();
 		SimpleValueFactory vf = SimpleValueFactory.getInstance();
 
 		List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
@@ -52,8 +55,13 @@ public class LoadingTest {
 				writer.endRDF();
 			}
 		}
+		
+//		if (! newFolder.exists()) {
+		Properties p = new Properties();
+			DuckDBDatabase db = new DuckDBDatabase("jdbc:duckdb:"+newFolder.getAbsolutePath(), false, p);
+//		}
 		// + newFolder.getAbsolutePath()
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:");
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:"+newFolder.getAbsolutePath());
 				Loader loader = new Loader(newFolder)) {
 			loader.parse(List.of(input.getAbsolutePath()+ "\thttp://example.org/graph"), conn_rw);
 		}

@@ -1,6 +1,7 @@
 package swiss.sib.swissprot.r2s2.sql;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -16,7 +17,7 @@ public class Columns {
 	private final List<Column> columns;
 
 	public Columns(List<Column> of) {
-		this.columns = of;
+		this.columns = new ArrayList<>(of);
 	}
 
 	public String definition() {
@@ -69,5 +70,9 @@ public class Columns {
 			appender.append(l.stringValue());
 		}
 
+	}
+
+	public List<Column> getColumns() {
+		return columns;
 	}
 }

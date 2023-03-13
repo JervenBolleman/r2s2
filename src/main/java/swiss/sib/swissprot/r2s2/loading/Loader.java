@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.duckdb.DuckDBConnection;
+import org.duckdb.DuckDBDatabase;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
@@ -141,6 +143,9 @@ public class Loader implements AutoCloseable {
 		int step = 0;
 		if (args.length >= 3) {
 			step = Integer.parseInt(args[2]);
+		}
+		if (! directoryToWriteToo.exists()) {
+			DuckDBDatabase db = new DuckDBDatabase(directoryToWriteToo.getAbsolutePath(), false, new Properties());
 		}
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath());
 				Loader wo = new Loader(directoryToWriteToo, step)) {
