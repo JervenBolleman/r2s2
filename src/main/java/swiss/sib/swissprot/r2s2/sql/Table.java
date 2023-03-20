@@ -62,20 +62,57 @@ public class Table {
 
 		replaceSingleValueColumnsWithVirtual(subject.getColumns(), conn);
 		replaceSingleValueColumnsWithVirtual(object.getColumns(), conn);
-		dropVirtualColumns(subject.getColumns(), conn);
-		dropVirtualColumns(object.getColumns(), conn);
+		repplaceLongestStartingPrefixWithVirtual(subject.getColumns(), conn);
+		repplaceLongestStartingPrefixWithVirtual(object.getColumns(), conn);
 	}
 
-	private void dropVirtualColumns(List<Column> columns, Connection conn) throws SQLException {
-		for (Column column : columns) {
-			try (Statement ct = conn.createStatement()) {
-				if (column instanceof VirtualSingleValueColumn) {
-					String dropColumn = "ALTER TABLE " + name() + " DROP " + column.name();
-					log.info("dropping: " + name() + "." + column.name());
-					ct.execute(dropColumn);
+	private void repplaceLongestStartingPrefixWithVirtual(List<Column> columns, Connection conn) throws SQLException {
+		int max = columns.size();
+		for (int i = 0; i < max; i++) {
+			Column column = columns.get(i);
+			String lcs = findLongestCommonPrefixString(conn, column);
+			if (lcs != null) {
+				columns.add(columns.indexOf(column), new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
+				try (Statement ct = conn.createStatement()) {
+					String uc = "UPDATE " + name() + " SET " + column.name() + "= SUBSTRING(" + column.name() + ",0,"
+							+ lcs.length() + ')';
+					log.warn(uc);
+					ct.executeUpdate(uc);
 				}
 			}
 		}
+
+	}
+
+	private String findLongestCommonPrefixString(Connection conn, Column column) throws SQLException {
+		if (!column.isVirtual() && Datatypes.TEXT == column.datatype()) {
+			try (Statement ct = conn.createStatement()) {
+				String dc = "SELECT " + column.name() + " FROM " + name() + "";
+
+				try (ResultSet executeQuery = ct.executeQuery(dc)) {
+					boolean first = executeQuery.next();
+					assert first;
+					String value = executeQuery.getString(1);
+					int pmax = value.length();
+					while (executeQuery.next()) {
+						String next = executeQuery.getString(1);
+						if (next.length() > pmax)
+							pmax = next.length();
+
+						int max = Math.min(next.length(), pmax);
+						int csl = 0;
+						while (csl < max && next.charAt(csl) == value.charAt(csl)) {
+							csl++;
+						}
+						pmax = csl;
+					}
+					String lcs = value.substring(0, pmax);
+					log.warn("Longest common substring for " + name() + '.' + column.name() + " is " + lcs);
+					return lcs;
+				}
+			}
+		}
+		return null;
 	}
 
 	private void replaceSingleValueColumnsWithVirtual(List<Column> columns, Connection conn) throws SQLException {
@@ -95,6 +132,11 @@ public class Table {
 						if (!executeQuery.next()) {
 							log.info(name() + '.' + column.name() + " has one value");
 							columns.set(i, new VirtualSingleValueColumn(column.name(), column.datatype(), value));
+							try (Statement ct2 = conn.createStatement()) {
+								String dropColumn = "ALTER TABLE " + name() + " DROP " + column.name();
+								log.info("dropping: " + name() + "." + column.name());
+								ct2.execute(dropColumn);
+							}
 						}
 					}
 				}

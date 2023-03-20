@@ -1,6 +1,7 @@
 package swiss.sib.swissprot.r2s2.sql;
 
 import java.sql.SQLException;
+import java.util.Objects;
 
 import org.duckdb.DuckDBAppender;
 import org.eclipse.rdf4j.model.Model;
@@ -34,5 +35,26 @@ public class Column {
 
 	public Model model() {
 		return model;
+	}
+	
+	public boolean isVirtual() {
+		return false;
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(datatype, model, name);
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		Column other = (Column) obj;
+		return datatype == other.datatype && Objects.equals(model, other.model) && Objects.equals(name, other.name);
 	}
 }

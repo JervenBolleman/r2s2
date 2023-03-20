@@ -9,4 +9,11 @@ public class VirtualSingleValueColumn extends Column {
 		this.value = value;
 	}
 
+	public String getValue() {
+		return value;
+	}
+
+	public boolean isVirtual() {
+		return true;
+	}
 }
