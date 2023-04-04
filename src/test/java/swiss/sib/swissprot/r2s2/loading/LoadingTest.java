@@ -66,20 +66,10 @@ public class LoadingTest {
 		Properties p = new Properties();
 		DuckDBDatabase db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
 		Model model;
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());
-				Loader loader = new Loader(newFolder)) {
+		Loader loader = new Loader(newFolder);
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
 			loader.parse(List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), conn_rw);
-			model = loader.model();
 		}
-		RDFWriter r2rmlWriter = Rio.createWriter(RDFFormat.TURTLE, System.out);
-		WriterConfig writerConfig = r2rmlWriter.getWriterConfig();
-		writerConfig.set(BasicWriterSettings.PRETTY_PRINT, Boolean.TRUE);
-		writerConfig.set(BasicWriterSettings.INLINE_BLANK_NODES, Boolean.TRUE);
-		r2rmlWriter.startRDF();
-		r2rmlWriter.handleNamespace(R2RML.PREFIX, R2RML.NAMESPACE);
-		for (var s : model) {
-			r2rmlWriter.handleStatement(s);
-		}
-		r2rmlWriter.endRDF();
+		loader.writeR2RML(System.out);
 	}
 }

@@ -159,7 +159,7 @@ final class LoadIntoTable implements AutoCloseable {
 			lock.lock();
 			appender.beginRow();
 			table.subject().add(subjectS, appender);
-			table.object().add(objectS, appender);
+			table.objects().get(0).columns().add(objectS, appender);
 			table.graph().add(tempGraphId, appender);
 			appender.endRow();
 			if (c++ % 10_000 == 0) {

@@ -4,9 +4,11 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
@@ -25,7 +27,7 @@ public class Table {
 	private static final Logger log = LoggerFactory.getLogger(Table.class);
 	private final Columns subject;
 	private final TempIriId predicate;
-	private final Columns object;
+	private final List<PredicateMap> objects = new ArrayList<>();
 	private final Column graphColumn;
 	private final Kind subjectKind;
 	private final Kind objectKind;
@@ -38,7 +40,7 @@ public class Table {
 		this.predicate = predicate;
 		this.subject = subject;
 		this.subjectKind = subjectKind;
-		this.object = object;
+		this.objects.add(new PredicateMap(predicate, object, objectKind, lang, datatype));
 		this.objectKind = objectKind;
 		this.graphColumn = graphColumn;
 		this.lang = lang;
@@ -49,14 +51,16 @@ public class Table {
 		return subject;
 	}
 
-	public Columns object() {
-		return object;
+	public List<PredicateMap> objects() {
+		return objects;
 	}
 
 	public void create(Connection conn) throws SQLException {
+		String objectsDefinition = objects.stream().map((p)->p.columns().definition()).collect(Collectors.joining(","));
+		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + ", " + objectsDefinition
+		+ ", " + graphColumn.definition() + ")";
 		try (Statement ct = conn.createStatement()) {
-			String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + ", " + object.definition()
-					+ ", " + graphColumn.definition() + ")";
+			
 			LoggerFactory.getLogger(this.getClass()).warn("Running: " + dml);
 			ct.execute(dml);
 		}
@@ -91,9 +95,11 @@ public class Table {
 	public void optimizeForR2RML(Connection conn) throws SQLException {
 
 		replaceSingleValueColumnsWithVirtual(subject.getColumns(), conn);
-		replaceSingleValueColumnsWithVirtual(object.getColumns(), conn);
+		for (PredicateMap p:objects)
+			replaceSingleValueColumnsWithVirtual(p.columns().getColumns(), conn);
 		replaceLongestStartingPrefixWithVirtual(subject.getColumns(), conn);
-		replaceLongestStartingPrefixWithVirtual(object.getColumns(), conn);
+		for (PredicateMap p:objects)
+			replaceLongestStartingPrefixWithVirtual(p.columns().getColumns(), conn);
 	}
 
 	private void replaceLongestStartingPrefixWithVirtual(List<Column> columns, Connection conn) throws SQLException {
@@ -184,19 +190,25 @@ public class Table {
 		Resource table = vf.createBNode();// "table_" + name());
 		Resource tablename = vf.createBNode();// "tablename_" + name());
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
-		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
-		Resource objectMap = vf.createBNode();// "objectMap_" + name());
+		
+		
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
 		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(name())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
-		model.add(vf.createStatement(table, R2RML.predicateMap, predicateMap));
-		model.add(vf.createStatement(predicateMap, R2RML.predicate, predicate));
-		model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
 
-		
 		createTemplate(model, vf, subjectMap, subjectKind, "subject", subject);
 
-		createTemplate(model, vf, objectMap, objectKind, "object", object);
+		
+		for (PredicateMap p:objects)
+		{
+			Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
+			Resource objectMap = vf.createBNode();// "objectMap_" + name());
+			model.add(vf.createStatement(table, R2RML.predicateMap, predicateMap));
+			model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
+			model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
+
+			createTemplate(model, vf, objectMap, p.objectKind(), "object", p.columns());
+		}
 		return model;
 	}
 
@@ -255,7 +267,7 @@ public class Table {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(datatype, graphColumn, lang, object, objectKind, predicate, subject, subjectKind);
+		return Objects.hash(datatype, graphColumn, lang, objects, objectKind, predicate, subject, subjectKind);
 	}
 
 	@Override
@@ -268,7 +280,7 @@ public class Table {
 			return false;
 		Table other = (Table) obj;
 		return Objects.equals(datatype, other.datatype) && Objects.equals(graphColumn, other.graphColumn)
-				&& Objects.equals(lang, other.lang) && Objects.equals(object, other.object)
+				&& Objects.equals(lang, other.lang) && Objects.equals(objects, other.objects)
 				&& objectKind == other.objectKind && Objects.equals(predicate, other.predicate)
 				&& Objects.equals(subject, other.subject) && subjectKind == other.subjectKind;
 	}

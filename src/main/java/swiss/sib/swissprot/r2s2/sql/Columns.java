@@ -1,7 +1,6 @@
 package swiss.sib.swissprot.r2s2.sql;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;

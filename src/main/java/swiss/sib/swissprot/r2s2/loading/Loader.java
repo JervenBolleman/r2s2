@@ -16,6 +16,7 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -56,13 +57,19 @@ import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.R2RML;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFHandler;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParser;
+import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.Rio;
+import org.eclipse.rdf4j.rio.WriterConfig;
 import org.eclipse.rdf4j.rio.helpers.BasicParserSettings;
+import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +78,7 @@ import swiss.sib.swissprot.r2s2.loading.LoadIntoTable.TargetKey;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
-public class Loader implements AutoCloseable {
+public class Loader {
 
 	public static final Compression COMPRESSION = Compression.LZ4;
 	private static final Logger logger = LoggerFactory.getLogger(Loader.class);
@@ -149,8 +156,8 @@ public class Loader implements AutoCloseable {
 		if (!directoryToWriteToo.exists()) {
 			DuckDBDatabase db = new DuckDBDatabase(directoryToWriteToo.getAbsolutePath(), false, new Properties());
 		}
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath());
-				Loader wo = new Loader(directoryToWriteToo, step)) {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath())) {
+			Loader wo = new Loader(directoryToWriteToo, step);
 			wo.parse(lines, conn_rw);
 		} catch (IOException e) {
 			logger.error("io", e);
@@ -191,8 +198,7 @@ public class Loader implements AutoCloseable {
 			Thread.interrupted();
 			break WAIT;
 		}
-		for (var p:predicatesDirectories.values())
-		{
+		for (var p : predicatesDirectories.values()) {
 			p.close();
 		}
 		Stream<LoadIntoTable> flatMap = predicatesDirectories.values().stream()
@@ -317,6 +323,7 @@ public class Loader implements AutoCloseable {
 		}
 
 		ExternalProcessHelper.waitForFutures(closers);
+		exec.shutdown();
 	}
 
 	private SQLException closeSingle(TempIriId predicate) {
@@ -554,17 +561,6 @@ public class Loader implements AutoCloseable {
 		}
 	}
 
-	@Override
-	public void close() {
-		for (var v : predicatesDirectories.values())
-			try {
-				v.close();
-			} catch (SQLException e) {
-				throw new RuntimeException(e);
-			}
-		exec.shutdown();
-	}
-
 	public List<Table> tables() {
 		List<Table> l = new ArrayList<>();
 		for (var me : predicatesDirectories.entrySet()) {
@@ -582,5 +578,22 @@ public class Loader implements AutoCloseable {
 			model.addAll(t.generateR2RML());
 		}
 		return model;
+	}
+
+	public void writeR2RML(PrintStream out) {
+
+		RDFWriter r2rmlWriter = Rio.createWriter(RDFFormat.TURTLE, out);
+		WriterConfig writerConfig = r2rmlWriter.getWriterConfig();
+		writerConfig.set(BasicWriterSettings.PRETTY_PRINT, Boolean.TRUE);
+		writerConfig.set(BasicWriterSettings.INLINE_BLANK_NODES, Boolean.TRUE);
+		r2rmlWriter.startRDF();
+		r2rmlWriter.handleNamespace(R2RML.PREFIX, R2RML.NAMESPACE);
+		r2rmlWriter.handleNamespace(RDF.PREFIX, RDF.NAMESPACE);
+		r2rmlWriter.handleNamespace(RDFS.PREFIX, RDFS.NAMESPACE);
+		for (var s : model()) {
+			r2rmlWriter.handleStatement(s);
+		}
+		r2rmlWriter.endRDF();
+
 	}
 }
