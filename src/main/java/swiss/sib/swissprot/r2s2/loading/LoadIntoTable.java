@@ -58,7 +58,7 @@ final class LoadIntoTable implements AutoCloseable {
 		this.tgid = tgid;
 		this.subjectKind = Kind.of(template.getSubject());
 		this.objectKind = Kind.of(template.getObject());
-		this.predicate = template.getPredicate();
+		this.predicate = predicate;
 		if (objectKind != Kind.LITERAL) {
 			lang = null;
 			datatype = null;
@@ -70,7 +70,7 @@ final class LoadIntoTable implements AutoCloseable {
 		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject");
 		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object");
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
-		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn);
+		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang, datatype);
 		table.create(conn);
 		this.appender = conn.createAppender("", table.name());
 	}

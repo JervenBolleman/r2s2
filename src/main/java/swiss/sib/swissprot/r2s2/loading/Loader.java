@@ -51,8 +51,10 @@ import org.duckdb.DuckDBDatabase;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -144,7 +146,7 @@ public class Loader implements AutoCloseable {
 		if (args.length >= 3) {
 			step = Integer.parseInt(args[2]);
 		}
-		if (! directoryToWriteToo.exists()) {
+		if (!directoryToWriteToo.exists()) {
 			DuckDBDatabase db = new DuckDBDatabase(directoryToWriteToo.getAbsolutePath(), false, new Properties());
 		}
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath());
@@ -189,8 +191,12 @@ public class Loader implements AutoCloseable {
 			Thread.interrupted();
 			break WAIT;
 		}
-		Stream<LoadIntoTable> flatMap = predicatesDirectories.values().stream().map(PredicateDirectoryWriter::getTargets)
-				.flatMap(Collection::stream);
+		for (var p:predicatesDirectories.values())
+		{
+			p.close();
+		}
+		Stream<LoadIntoTable> flatMap = predicatesDirectories.values().stream()
+				.map(PredicateDirectoryWriter::getTargets).flatMap(Collection::stream);
 		return flatMap.distinct().map(LoadIntoTable::table).collect(Collectors.toSet());
 	}
 
@@ -464,8 +470,13 @@ public class Loader implements AutoCloseable {
 
 		@Override
 		public void close() throws SQLException {
-			for (LoadIntoTable writer : targets.values()) {
-				writer.close();
+			try {
+				lock.lock();
+				for (LoadIntoTable writer : targets.values()) {
+					writer.close();
+				}
+			} finally {
+				lock.unlock();
 			}
 		}
 
@@ -545,6 +556,31 @@ public class Loader implements AutoCloseable {
 
 	@Override
 	public void close() {
+		for (var v : predicatesDirectories.values())
+			try {
+				v.close();
+			} catch (SQLException e) {
+				throw new RuntimeException(e);
+			}
 		exec.shutdown();
+	}
+
+	public List<Table> tables() {
+		List<Table> l = new ArrayList<>();
+		for (var me : predicatesDirectories.entrySet()) {
+			PredicateDirectoryWriter value = me.getValue();
+			for (var t : value.getTargets()) {
+				l.add(t.table());
+			}
+		}
+		return l;
+	}
+
+	public Model model() {
+		Model model = new LinkedHashModel();
+		for (var t : tables()) {
+			model.addAll(t.generateR2RML());
+		}
+		return model;
 	}
 }

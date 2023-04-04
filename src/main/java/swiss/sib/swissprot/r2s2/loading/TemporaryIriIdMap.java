@@ -164,5 +164,10 @@ public class TemporaryIriIdMap {
 		public int id() {
 			return id;
 		}
+
+		@Override
+		public String toString() {
+			return wrapped.toString();
+		}
 	}
 }

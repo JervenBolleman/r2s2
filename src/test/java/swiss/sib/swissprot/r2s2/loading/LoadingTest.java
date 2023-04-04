@@ -13,14 +13,19 @@ import java.util.Optional;
 import java.util.Properties;
 
 import org.duckdb.DuckDBDatabase;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.R2RML;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterFactory;
 import org.eclipse.rdf4j.rio.RDFWriterRegistry;
+import org.eclipse.rdf4j.rio.Rio;
+import org.eclipse.rdf4j.rio.WriterConfig;
+import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -41,6 +46,8 @@ public class LoadingTest {
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("杭州市", "cz")),
+				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala", "en-UK")),
+				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala lala", "en-UK")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
 		Optional<RDFWriterFactory> optional = RDFWriterRegistry.getInstance().get(RDFFormat.RDFXML);
 		File input = temp.newFile("input.rdf");
@@ -56,14 +63,23 @@ public class LoadingTest {
 			}
 		}
 
-//		if (! newFolder.exists()) {
 		Properties p = new Properties();
 		DuckDBDatabase db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
-//		}
-		// + newFolder.getAbsolutePath()
+		Model model;
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());
 				Loader loader = new Loader(newFolder)) {
 			loader.parse(List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), conn_rw);
+			model = loader.model();
 		}
+		RDFWriter r2rmlWriter = Rio.createWriter(RDFFormat.TURTLE, System.out);
+		WriterConfig writerConfig = r2rmlWriter.getWriterConfig();
+		writerConfig.set(BasicWriterSettings.PRETTY_PRINT, Boolean.TRUE);
+		writerConfig.set(BasicWriterSettings.INLINE_BLANK_NODES, Boolean.TRUE);
+		r2rmlWriter.startRDF();
+		r2rmlWriter.handleNamespace(R2RML.PREFIX, R2RML.NAMESPACE);
+		for (var s : model) {
+			r2rmlWriter.handleStatement(s);
+		}
+		r2rmlWriter.endRDF();
 	}
 }

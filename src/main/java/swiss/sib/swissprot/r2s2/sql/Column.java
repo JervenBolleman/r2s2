@@ -4,13 +4,11 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 import org.duckdb.DuckDBAppender;
-import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 
 public class Column {
 	private final String name;
 	private final Datatypes datatype;
-	private final Model model = new LinkedHashModel();
+	
 	
 	public Column(String name, Datatypes datatype) {
 		this.name = name;
@@ -32,10 +30,6 @@ public class Column {
 	public Datatypes datatype() {
 		return datatype;
 	}
-
-	public Model model() {
-		return model;
-	}
 	
 	public boolean isVirtual() {
 		return false;
@@ -43,7 +37,7 @@ public class Column {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(datatype, model, name);
+		return Objects.hash(datatype, name);
 	}
 
 	@Override
@@ -55,6 +49,6 @@ public class Column {
 		if (getClass() != obj.getClass())
 			return false;
 		Column other = (Column) obj;
-		return datatype == other.datatype && Objects.equals(model, other.model) && Objects.equals(name, other.name);
+		return datatype == other.datatype && Objects.equals(name, other.name);
 	}
 }
