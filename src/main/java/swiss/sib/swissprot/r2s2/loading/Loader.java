@@ -571,29 +571,4 @@ public class Loader {
 		}
 		return l;
 	}
-
-	public Model model() {
-		Model model = new LinkedHashModel();
-		for (var t : tables()) {
-			model.addAll(t.generateR2RML());
-		}
-		return model;
-	}
-
-	public void writeR2RML(PrintStream out) {
-
-		RDFWriter r2rmlWriter = Rio.createWriter(RDFFormat.TURTLE, out);
-		WriterConfig writerConfig = r2rmlWriter.getWriterConfig();
-		writerConfig.set(BasicWriterSettings.PRETTY_PRINT, Boolean.TRUE);
-		writerConfig.set(BasicWriterSettings.INLINE_BLANK_NODES, Boolean.TRUE);
-		r2rmlWriter.startRDF();
-		r2rmlWriter.handleNamespace(R2RML.PREFIX, R2RML.NAMESPACE);
-		r2rmlWriter.handleNamespace(RDF.PREFIX, RDF.NAMESPACE);
-		r2rmlWriter.handleNamespace(RDFS.PREFIX, RDFS.NAMESPACE);
-		for (var s : model()) {
-			r2rmlWriter.handleStatement(s);
-		}
-		r2rmlWriter.endRDF();
-
-	}
 }

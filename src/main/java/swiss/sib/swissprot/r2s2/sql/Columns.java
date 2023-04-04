@@ -30,7 +30,7 @@ public class Columns {
 	}
 
 	public String definition() {
-		return columns.stream().map(Column::definition).collect(Collectors.joining(", "));
+		return columns.stream().filter(c -> !c.isVirtual()).map(Column::definition).collect(Collectors.joining(", "));
 	}
 
 	public static Columns from(Kind kind, String lang, IRI datatype, String prefix) {
@@ -42,8 +42,8 @@ public class Columns {
 			return new Columns(List.of(new Column(prefix + ID, Datatypes.BIGINT)));
 		case LITERAL:
 			if (lang != null) {
-				return new Columns(List.of(new Column(prefix + LANG, Datatypes.TEXT),
-						new Column(prefix + VALUE, Datatypes.TEXT)));
+				return new Columns(
+						List.of(new Column(prefix + LANG, Datatypes.TEXT), new Column(prefix + VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
 				return new Columns(List.of(new Column(prefix + DATATYPE, Datatypes.TEXT),
 						new Column(prefix + VALUE, Datatypes.TEXT)));

@@ -1,6 +1,9 @@
 package swiss.sib.swissprot.r2s2.loading;
 
 import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -13,22 +16,22 @@ import java.util.Optional;
 import java.util.Properties;
 
 import org.duckdb.DuckDBDatabase;
-import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.vocabulary.R2RML;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterFactory;
 import org.eclipse.rdf4j.rio.RDFWriterRegistry;
-import org.eclipse.rdf4j.rio.Rio;
-import org.eclipse.rdf4j.rio.WriterConfig;
-import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
+import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
+import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
+import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
+import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class LoadingTest {
 
@@ -46,6 +49,7 @@ public class LoadingTest {
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("杭州市", "cz")),
+				vf.createStatement(RDF.BAG, RDFS.LABEL, vf.createLiteral("杭州", "cz")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala", "en-UK")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala lala", "en-UK")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
@@ -65,11 +69,44 @@ public class LoadingTest {
 
 		Properties p = new Properties();
 		DuckDBDatabase db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
-		Model model;
 		Loader loader = new Loader(newFolder);
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
 			loader.parse(List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), conn_rw);
 		}
-		loader.writeR2RML(System.out);
+		List<Table> tables = loader.tables();
+		validateRdfTypeStatementsLoaded(newFolder, tables);
+		R2RMLFromTables.write(tables, System.out);
+		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting(tables);
+
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
+			rdfTypeSplitting.split(conn_rw);
+			for (Table table : rdfTypeSplitting.tables()) {
+				IntroduceVirtualColumns.optimizeForR2RML(table, conn_rw);
+			}
+		}
+		R2RMLFromTables.write(rdfTypeSplitting.tables(), System.out);
+		db.shutdown();
+	}
+
+	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
+			for (Table t : tables) {
+				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
+					try (java.sql.Statement count = conn_rw.createStatement();
+							var rs = count.executeQuery("SELECT COUNT(*) FROM " + t.name())) {
+						assertTrue(rs.next());
+						assertEquals(3, rs.getInt(1));
+						assertFalse(rs.next());
+					}
+
+					try (java.sql.Statement count = conn_rw.createStatement();
+							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_parts) FROM " + t.name())) {
+						assertTrue(rs.next());
+						assertEquals(2, rs.getInt(1));
+						assertFalse(rs.next());
+					}
+				}
+			}
+		}
 	}
 }

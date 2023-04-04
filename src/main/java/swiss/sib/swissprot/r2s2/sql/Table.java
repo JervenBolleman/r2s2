@@ -1,13 +1,13 @@
 package swiss.sib.swissprot.r2s2.sql;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.eclipse.rdf4j.model.IRI;
@@ -17,25 +17,27 @@ import org.eclipse.rdf4j.model.base.CoreDatatype;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.R2RML;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
-import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 
 public class Table {
 	private static final Logger log = LoggerFactory.getLogger(Table.class);
 	private final Columns subject;
-	private final TempIriId predicate;
+	private final IRI predicate;
 	private final List<PredicateMap> objects = new ArrayList<>();
 	private final Column graphColumn;
 	private final Kind subjectKind;
 	private final Kind objectKind;
 	private final String lang;
 	private final IRI datatype;
+	private final int id;
+	private static final AtomicInteger ID_GEN = new AtomicInteger();
 
-	public Table(TempIriId predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind,
-			Column graphColumn, String lang, IRI datatype) {
+	public Table(IRI predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind, Column graphColumn,
+			String lang, IRI datatype) {
 		super();
 		this.predicate = predicate;
 		this.subject = subject;
@@ -45,6 +47,7 @@ public class Table {
 		this.graphColumn = graphColumn;
 		this.lang = lang;
 		this.datatype = datatype;
+		this.id = ID_GEN.incrementAndGet();
 	}
 
 	public Columns subject() {
@@ -56,11 +59,17 @@ public class Table {
 	}
 
 	public void create(Connection conn) throws SQLException {
-		String objectsDefinition = objects.stream().map((p)->p.columns().definition()).collect(Collectors.joining(","));
-		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + ", " + objectsDefinition
-		+ ", " + graphColumn.definition() + ")";
+		String objectsDefinition = objects.stream().map((p) -> p.columns().definition())
+				.collect(Collectors.joining(","));
+		if (objectsDefinition == null || objectsDefinition.isEmpty()) {
+			objectsDefinition = "";
+		} else {
+			objectsDefinition = ", " + objectsDefinition;
+		}
+		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + objectsDefinition + ", "
+				+ graphColumn.definition() + ")";
 		try (Statement ct = conn.createStatement()) {
-			
+
 			LoggerFactory.getLogger(this.getClass()).warn("Running: " + dml);
 			ct.execute(dml);
 		}
@@ -69,7 +78,7 @@ public class Table {
 
 	public String name() {
 
-		String name = "p_" + predicate.id() + "_" + subjectKind.label() + "_" + objectKind.label();
+		String name = "_" + id + "_" + subjectKind.label() + "_" + objectKind.label();
 		if (lang != null) {
 			return name + "_" + lang.replace('-', '_');
 		} else if (datatype != null) {
@@ -92,97 +101,7 @@ public class Table {
 		return graphColumn;
 	}
 
-	public void optimizeForR2RML(Connection conn) throws SQLException {
-
-		replaceSingleValueColumnsWithVirtual(subject.getColumns(), conn);
-		for (PredicateMap p:objects)
-			replaceSingleValueColumnsWithVirtual(p.columns().getColumns(), conn);
-		replaceLongestStartingPrefixWithVirtual(subject.getColumns(), conn);
-		for (PredicateMap p:objects)
-			replaceLongestStartingPrefixWithVirtual(p.columns().getColumns(), conn);
-	}
-
-	private void replaceLongestStartingPrefixWithVirtual(List<Column> columns, Connection conn) throws SQLException {
-		int max = columns.size();
-		for (int i = 0; i < max; i++) {
-			Column column = columns.get(i);
-			String lcs = findLongestCommonPrefixString(conn, column);
-			if (lcs != null) {
-				columns.add(columns.indexOf(column),
-						new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
-				try (Statement ct = conn.createStatement()) {
-					String uc = "UPDATE " + name() + " SET " + column.name() + "= SUBSTRING(" + column.name() + ",0,"
-							+ lcs.length() + ')';
-					log.warn(uc);
-					ct.executeUpdate(uc);
-				}
-			}
-		}
-
-	}
-
-	private String findLongestCommonPrefixString(Connection conn, Column column) throws SQLException {
-		if (!column.isVirtual() && Datatypes.TEXT == column.datatype()) {
-			try (Statement ct = conn.createStatement()) {
-				String dc = "SELECT " + column.name() + " FROM " + name() + "";
-
-				try (ResultSet executeQuery = ct.executeQuery(dc)) {
-					boolean first = executeQuery.next();
-					assert first;
-					String value = executeQuery.getString(1);
-					int pmax = value.length();
-					while (executeQuery.next()) {
-						String next = executeQuery.getString(1);
-
-						int max = Math.min(next.length(), pmax);
-						int csl = 0;
-						while (csl < max && next.charAt(csl) == value.charAt(csl)) {
-							csl++;
-						}
-						pmax = csl;
-						if (pmax == 0) {
-							return null;
-						}
-					}
-					String lcs = value.substring(0, pmax);
-					log.warn("Longest common substring for " + name() + '.' + column.name() + " is " + lcs);
-					return lcs;
-				}
-			}
-		}
-		return null;
-	}
-
-	private void replaceSingleValueColumnsWithVirtual(List<Column> columns, Connection conn) throws SQLException {
-
-		for (int i = 0; i < columns.size(); i++) {
-			Column column = columns.get(i);
-			try (Statement ct = conn.createStatement()) {
-//				if (Datatypes.TEXT == column.datatype()) {
-				String dc = "SELECT DISTINCT " + column.name() + " FROM " + name() + " LIMIT 2";
-
-				log.warn("Running: " + dc);
-				try (ResultSet executeQuery = ct.executeQuery(dc)) {
-					boolean first = executeQuery.next();
-					assert first;
-
-					String value = executeQuery.getString(1);
-					if (!executeQuery.next()) {
-						log.info(name() + '.' + column.name() + " has one value");
-						columns.set(i, new VirtualSingleValueColumn(column.name(), column.datatype(), value));
-						try (Statement ct2 = conn.createStatement()) {
-							String dropColumn = "ALTER TABLE " + name() + " DROP " + column.name();
-							log.info("dropping: " + name() + "." + column.name());
-							ct2.execute(dropColumn);
-						}
-					} else {
-						log.info(name() + '.' + column.name() + " has more than one value");
-					}
-				}
-//				}
-			}
-		}
-	}
+	
 
 	public Model generateR2RML() {
 		Model model = new LinkedHashModel();
@@ -190,26 +109,43 @@ public class Table {
 		Resource table = vf.createBNode();// "table_" + name());
 		Resource tablename = vf.createBNode();// "tablename_" + name());
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
-		
-		
+
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
 		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(name())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
 
 		createTemplate(model, vf, subjectMap, subjectKind, "subject", subject);
 
-		
-		for (PredicateMap p:objects)
-		{
-			Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
-			Resource objectMap = vf.createBNode();// "objectMap_" + name());
-			model.add(vf.createStatement(table, R2RML.predicateMap, predicateMap));
-			model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
-			model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
-
-			createTemplate(model, vf, objectMap, p.objectKind(), "object", p.columns());
+		for (PredicateMap p : objects) {
+			createPredicateMap(model, vf, table, p);
 		}
 		return model;
+	}
+
+	private void createPredicateMap(Model model, SimpleValueFactory vf, Resource table, PredicateMap p) {
+		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
+		Resource objectMap = vf.createBNode();// "objectMap_" + name());
+		if (p.predicate().equals(RDF.TYPE)) {
+			boolean allVirtual = true;
+			StringBuilder template = new StringBuilder();
+
+			for (Column c : p.columns().getColumns()) {
+				if (!c.isVirtual())
+					allVirtual = false;
+				else
+					template.append(((VirtualSingleValueColumn) c).getValue());
+			}
+			if (allVirtual) {
+				model.add(vf.createStatement(table, R2RML.clazz, vf.createIRI(template.toString())));
+				return;
+			}
+		}
+		model.add(vf.createStatement(table, R2RML.predicateMap, predicateMap));
+		model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
+		model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
+
+		createTemplate(model, vf, objectMap, p.objectKind(), "object", p.columns());
+
 	}
 
 	private void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, Columns c) {
@@ -245,10 +181,9 @@ public class Table {
 	private void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Optional<Column> column) {
 		Column langColumn = column.get();
 		if (langColumn.isVirtual()) {
-			model.add(map, p,
-					vf.createLiteral(((VirtualSingleValueColumn) langColumn).getValue()));
+			model.add(map, p, vf.createLiteral(((VirtualSingleValueColumn) langColumn).getValue()));
 		} else {
-			model.add(map,p, vf.createLiteral('{' + langColumn.name() + '}'));
+			model.add(map, p, vf.createLiteral('{' + langColumn.name() + '}'));
 		}
 	}
 
@@ -284,6 +219,8 @@ public class Table {
 				&& objectKind == other.objectKind && Objects.equals(predicate, other.predicate)
 				&& Objects.equals(subject, other.subject) && subjectKind == other.subjectKind;
 	}
-	
-	
+
+	public Kind subjectKind() {
+		return subjectKind;
+	}
 }

@@ -79,7 +79,6 @@ final class LoadIntoTable implements AutoCloseable {
 	public void close() throws SQLException {
 		if (!closed) {
 			this.appender.close();
-			table.optimizeForR2RML(conn);
 			this.conn.close();
 		}
 		closed = true;
