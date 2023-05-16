@@ -34,6 +34,10 @@ public class Column {
 	public boolean isVirtual() {
 		return false;
 	}
+	
+	public final boolean isPhysical() {
+		return ! isVirtual();
+	}
 
 	@Override
 	public int hashCode() {

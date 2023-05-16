@@ -67,8 +67,8 @@ final class LoadIntoTable implements AutoCloseable {
 			lang = lit.getLanguage().orElse(null);
 			datatype = lit.getDatatype();
 		}
-		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject");
-		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object");
+		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_"+predicate.id());
+		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_"+predicate.id());
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
 		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang, datatype);
 		table.create(conn);

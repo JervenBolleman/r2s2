@@ -20,13 +20,13 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class RdfTypeSplitting {
 	private static final Logger log = LoggerFactory.getLogger(RdfTypeSplitting.class);
-	private final List<Table> tables;
+	
 
-	public RdfTypeSplitting(List<Table> tables) {
-		this.tables = new ArrayList<>(tables);
+	public RdfTypeSplitting() {
+		
 	}
 
-	public void split(Connection conn) {
+	public List<Table> split(Connection conn, List<Table> tables) {
 		List<Table> newTables = new ArrayList<>();
 		for (Iterator<Table> iterator = tables.iterator(); iterator.hasNext();) {
 			Table t = iterator.next();
@@ -38,7 +38,8 @@ public class RdfTypeSplitting {
 				}
 			}
 		}
-		tables.addAll(newTables);
+		newTables.addAll(tables);
+		return newTables;
 	}
 
 	private List<Table> split(Table t, Iterator<Table> iterator, Connection conn, PredicateMap pm) {
@@ -92,9 +93,5 @@ public class RdfTypeSplitting {
 			}
 		}
 		return newTables;
-	}
-
-	public List<Table> tables() {
-		return tables;
 	}
 }

@@ -101,8 +101,6 @@ public class Table {
 		return graphColumn;
 	}
 
-	
-
 	public Model generateR2RML() {
 		Model model = new LinkedHashModel();
 		SimpleValueFactory vf = SimpleValueFactory.getInstance();
@@ -151,17 +149,14 @@ public class Table {
 	private void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, Columns c) {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
-			Optional<Column> column = c.getColumn(n + Columns.DATATYPE);
-			if (!column.isEmpty()) {
-				columnDefinition(model, vf, R2RML.datatype, map, column);
-			}
-			column = c.getColumn(n + Columns.LANG);
-			if (!column.isEmpty()) {
-				columnDefinition(model, vf, R2RML.language, map, column);
-			}
-			column = c.getColumn(n + Columns.VALUE);
-			if (!column.isEmpty()) {
-				columnDefinition(model, vf, R2RML.template, map, column);
+			for (Column column : c.getColumns()) {
+				if (column.name().endsWith(Columns.DATATYPE)) {
+					columnDefinition(model, vf, R2RML.datatype, map, column);
+				} else if (column.name().endsWith(Columns.LANG)) {
+					columnDefinition(model, vf, R2RML.language, map, column);
+				} else if (column.name().endsWith(Columns.VALUE)) {
+					columnDefinition(model, vf, R2RML.template, map, column);
+				}
 			}
 		} else if (k == Kind.IRI) {
 			StringBuilder template = new StringBuilder();
@@ -178,12 +173,11 @@ public class Table {
 		}
 	}
 
-	private void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Optional<Column> column) {
-		Column langColumn = column.get();
-		if (langColumn.isVirtual()) {
-			model.add(map, p, vf.createLiteral(((VirtualSingleValueColumn) langColumn).getValue()));
+	private void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Column column) {
+		if (column.isVirtual()) {
+			model.add(map, p, vf.createLiteral(((VirtualSingleValueColumn) column).getValue()));
 		} else {
-			model.add(map, p, vf.createLiteral('{' + langColumn.name() + '}'));
+			model.add(map, p, vf.createLiteral('{' + column.name() + '}'));
 		}
 	}
 

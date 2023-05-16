@@ -18,7 +18,7 @@ import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 public class IntroduceVirtualColumns {
 	private static final Logger log = LoggerFactory.getLogger(IntroduceVirtualColumns.class);
 
-	public static void optimizeForR2RML(Table table, Connection conn) throws SQLException {
+	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
 
 		replaceSingleValueColumnsWithVirtual(table, table.subject().getColumns(), conn);
 		replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);

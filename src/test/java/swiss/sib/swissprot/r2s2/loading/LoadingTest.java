@@ -30,6 +30,7 @@ import org.junit.rules.TemporaryFolder;
 
 import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
 import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
+import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -76,15 +77,16 @@ public class LoadingTest {
 		List<Table> tables = loader.tables();
 		validateRdfTypeStatementsLoaded(newFolder, tables);
 		R2RMLFromTables.write(tables, System.out);
-		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting(tables);
 
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
-			rdfTypeSplitting.split(conn_rw);
-			for (Table table : rdfTypeSplitting.tables()) {
-				IntroduceVirtualColumns.optimizeForR2RML(table, conn_rw);
+			tables = new TableMerging().merge(conn_rw, tables);
+			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
+			tables = rdfTypeSplitting.split(conn_rw, tables);
+			for (Table table : tables) {
+				IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
 			}
 		}
-		R2RMLFromTables.write(rdfTypeSplitting.tables(), System.out);
+		R2RMLFromTables.write(tables, System.out);
 		db.shutdown();
 	}
 
@@ -100,7 +102,7 @@ public class LoadingTest {
 					}
 
 					try (java.sql.Statement count = conn_rw.createStatement();
-							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_parts) FROM " + t.name())) {
+							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_0_parts) FROM " + t.name())) {
 						assertTrue(rs.next());
 						assertEquals(2, rs.getInt(1));
 						assertFalse(rs.next());
