@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 
-import org.duckdb.DuckDBDatabase;
+import org.duckdb.DuckDBDatabaseMetaData;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -69,11 +69,16 @@ public class LoadingTest {
 		}
 
 		Properties p = new Properties();
-		DuckDBDatabase db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
-		Loader loader = new Loader(newFolder);
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
-			loader.parse(List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), conn_rw);
+		try {
+			Class.forName("org.duckdb.DuckDBDriver");
+		} catch (ClassNotFoundException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
 		}
+//		DuckDBDatabaseMetaData db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
+		
+		Loader loader = Loader.parse(newFolder, List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), 0);
+		
 		List<Table> tables = loader.tables();
 		validateRdfTypeStatementsLoaded(newFolder, tables);
 		R2RMLFromTables.write(tables, System.out);
@@ -87,7 +92,7 @@ public class LoadingTest {
 			}
 		}
 		R2RMLFromTables.write(tables, System.out);
-		db.shutdown();
+//		db.shutdown();
 	}
 
 	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {

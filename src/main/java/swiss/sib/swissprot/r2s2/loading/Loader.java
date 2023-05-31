@@ -16,7 +16,6 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -48,28 +47,20 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.duckdb.DuckDBConnection;
-import org.duckdb.DuckDBDatabase;
+
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.vocabulary.R2RML;
-import org.eclipse.rdf4j.model.vocabulary.RDF;
-import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFHandler;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParser;
-import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.Rio;
-import org.eclipse.rdf4j.rio.WriterConfig;
 import org.eclipse.rdf4j.rio.helpers.BasicParserSettings;
-import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,7 +123,7 @@ public class Loader {
 		this.directoryToWriteToo = directoryToWriteToo;
 		this.step = step;
 		if (!directoryToWriteToo.exists()) {
-			directoryToWriteToo.mkdirs();
+			directoryToWriteToo.getParentFile().mkdirs();
 		}
 		int procs = Runtime.getRuntime().availableProcessors();
 		int estimateParsingProcessors = estimateParsingProcessors(procs);
@@ -153,15 +144,20 @@ public class Loader {
 		if (args.length >= 3) {
 			step = Integer.parseInt(args[2]);
 		}
-		if (!directoryToWriteToo.exists()) {
-			DuckDBDatabase db = new DuckDBDatabase(directoryToWriteToo.getAbsolutePath(), false, new Properties());
+		parse(directoryToWriteToo, lines, step);
+	}
+
+	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
+		try {
+			Class.forName("org.duckdb.DuckDBDriver");
+		} catch (ClassNotFoundException e1) {
+			throw new IllegalStateException(e1);
 		}
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath())) {
-			Loader wo = new Loader(directoryToWriteToo, step);
+		Loader wo = new Loader(directoryToWriteToo, step);
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(), new Properties())) {
 			wo.parse(lines, conn_rw);
-		} catch (IOException e) {
-			logger.error("io", e);
 		}
+		return wo;
 	}
 
 	private Set<Table> parseFilesIntoPerPredicateType(List<String> lines, List<Future<?>> toRun, CountDownLatch latch,

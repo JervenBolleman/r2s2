@@ -161,9 +161,10 @@ final class LoadIntoTable implements AutoCloseable {
 			table.objects().get(0).columns().add(objectS, appender);
 			table.graph().add(tempGraphId, appender);
 			appender.endRow();
-			if (c++ % 10_000 == 0) {
+			if (c++ > 10_000) {
 				appender.flush();
 				c = 0;
+				logger.info("Flushed " +table.name());
 			}
 		} finally {
 			lock.unlock();

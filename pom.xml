@@ -9,7 +9,7 @@
 		<rdf4j.version>4.2.3</rdf4j.version>
 		<slf4j.version>[1.7,)</slf4j.version>
 		<ontop.version>[5.0,)</ontop.version>
-		<duckdb.version>[0-6,)</duckdb.version>
+		<duckdb.version>[0-8,)</duckdb.version>
 		<maven.compiler.release>17</maven.compiler.release>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
@@ -101,7 +101,7 @@
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-simple</artifactId>
 			<version>${slf4j.version}</version>
-            <scope>test</scope>
+			<!--			<scope>test</scope>-->
 		</dependency>
 		<dependency>
 			<groupId>org.duckdb</groupId>
@@ -144,7 +144,7 @@
 							<transformers>
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>swiss.sib.swissprot.sail.readonly.WriteOnce</mainClass>
+									<mainClass>swiss.sib.swissprot.r2s2.loading.Loader</mainClass>
 								</transformer>
 							</transformers>
 						</configuration>
