@@ -77,7 +77,7 @@ public class LoadingTest {
 		}
 //		DuckDBDatabaseMetaData db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
 		
-		Loader loader = Loader.parse(newFolder, List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), 0);
+		Loader loader = Loader.parse(newFolder, List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), 1);
 		
 		List<Table> tables = loader.tables();
 		validateRdfTypeStatementsLoaded(newFolder, tables);
