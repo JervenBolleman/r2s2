@@ -65,8 +65,12 @@ import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
+import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
+import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.loading.LoadIntoTable.TargetKey;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
+import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class Loader {
@@ -155,6 +159,12 @@ public class Loader {
 		}
 		Loader wo = new Loader(directoryToWriteToo, step);
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(), new Properties())) {
+			try (java.sql.Statement update = conn_rw.createStatement()) {
+				update.executeUpdate("SET memory_limit='30GB'");
+				if(!conn_rw.getAutoCommit()) {
+					conn_rw.commit();
+				}
+			}
 			wo.parse(lines, conn_rw);
 		}
 		return wo;
@@ -278,8 +288,14 @@ public class Loader {
 
 	public void parse(List<String> lines, Connection conn_rw) throws IOException, SQLException {
 
-		if (step <= 0) {
+		if (step == 1 || step == 0) {
+			logger.info("Starting step 1");
 			stepOne(lines, conn_rw);
+		}
+		
+		if (step == 2 || step == 0) {
+			logger.info("Starting step 2");
+			stepTwo(conn_rw);
 		}
 	}
 
@@ -293,6 +309,21 @@ public class Loader {
 		writeOutPredicates(closers, conn_rw);
 		temporaryGraphIdMap.toDisk(directoryToWriteToo);
 		logger.info("step 1 took " + Duration.between(start, Instant.now()));
+	}
+	
+	private void stepTwo(Connection conn_rw) throws SQLException {
+		List<Table> tables = this.tables();
+		R2RMLFromTables.write(tables, System.out);
+
+		
+		tables = new TableMerging().merge(conn_rw, tables);
+		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
+		tables = rdfTypeSplitting.split(conn_rw, tables);
+		for (Table table : tables) {
+			IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
+		}
+	
+		R2RMLFromTables.write(tables, System.out);
 	}
 
 	private void writeOutPredicates(List<Future<SQLException>> closers, Connection conn_rw)

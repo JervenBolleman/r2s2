@@ -108,6 +108,9 @@ public class TableMerging {
 				stat.execute(update);
 				stat.execute(delete);
 				stat.execute(insert);
+				if(!conn.getAutoCommit()) {
+					conn.commit();
+				}
 				tableToMergeInto.objects().add(pm);
 			}
 		}

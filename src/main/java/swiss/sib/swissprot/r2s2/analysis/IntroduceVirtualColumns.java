@@ -42,7 +42,11 @@ public class IntroduceVirtualColumns {
 						String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
 								+ ",0," + lcs.length() + ')';
 						log.warn(uc);
+						
 						ct.executeUpdate(uc);
+						if(!conn.getAutoCommit()) {
+							conn.commit();
+						}
 					}
 				}
 			}

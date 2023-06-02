@@ -78,6 +78,9 @@ public class RdfTypeSplitting {
 						log.info("Executing " + in);
 						try (Statement update = conn.createStatement()) {
 							update.executeUpdate(in);
+							if(!conn.getAutoCommit()) {
+								conn.commit();
+							}
 						}
 					}
 				}

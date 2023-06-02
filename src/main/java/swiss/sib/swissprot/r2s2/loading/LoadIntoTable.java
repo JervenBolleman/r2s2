@@ -36,8 +36,8 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 
 final class LoadIntoTable implements AutoCloseable {
 
+	private static final int FLUSH_EVERY_X = 1 * 1024 * 1024;
 	private static final Logger logger = LoggerFactory.getLogger(LoadIntoTable.class);
-	protected static final long SWITCH_TO_NEW_FILE = 128l * 1024l * 1024l;
 	private final Kind subjectKind;
 	private final Kind objectKind;
 	private final IRI datatype;
@@ -49,7 +49,7 @@ final class LoadIntoTable implements AutoCloseable {
 	private final IRI predicate;
 	private final Table table;
 	private final DuckDBAppender appender;
-	private volatile int c;
+	private volatile int c = 1;
 	private final Lock lock = new ReentrantLock();
 
 	LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate)
@@ -67,10 +67,11 @@ final class LoadIntoTable implements AutoCloseable {
 			lang = lit.getLanguage().orElse(null);
 			datatype = lit.getDatatype();
 		}
-		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_"+predicate.id());
-		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_"+predicate.id());
+		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_" + predicate.id());
+		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_" + predicate.id());
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
-		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang, datatype);
+		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
+				datatype);
 		table.create(conn);
 		this.appender = conn.createAppender("", table.name());
 	}
@@ -161,11 +162,11 @@ final class LoadIntoTable implements AutoCloseable {
 			table.objects().get(0).columns().add(objectS, appender);
 			table.graph().add(tempGraphId, appender);
 			appender.endRow();
-			if (c++ > 10_000) {
+			if (c % FLUSH_EVERY_X == 0) {
 				appender.flush();
-				c = 0;
-				logger.info("Flushed " +table.name());
+				logger.info("Flushed " + table.name() + " now has " + c + " rows");
 			}
+			c++;
 		} finally {
 			lock.unlock();
 		}
@@ -186,7 +187,7 @@ final class LoadIntoTable implements AutoCloseable {
 	public String lang() {
 		return lang;
 	}
-	
+
 	public Table table() {
 		return table;
 	}
