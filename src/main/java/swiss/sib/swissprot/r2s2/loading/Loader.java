@@ -313,9 +313,7 @@ public class Loader {
 	
 	private void stepTwo(Connection conn_rw) throws SQLException {
 		List<Table> tables = this.tables();
-		R2RMLFromTables.write(tables, System.out);
-
-		
+	
 		tables = new TableMerging().merge(conn_rw, tables);
 		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
 		tables = rdfTypeSplitting.split(conn_rw, tables);
