@@ -6,7 +6,6 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -26,28 +25,54 @@ import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 public class Table {
 	private static final Logger log = LoggerFactory.getLogger(Table.class);
 	private final Columns subject;
-	private final IRI predicate;
 	private final List<PredicateMap> objects = new ArrayList<>();
 	private final Column graphColumn;
 	private final Kind subjectKind;
-	private final Kind objectKind;
-	private final String lang;
-	private final IRI datatype;
-	private final int id;
+	private final String name;
 	private static final AtomicInteger ID_GEN = new AtomicInteger();
 
 	public Table(IRI predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind, Column graphColumn,
 			String lang, IRI datatype) {
 		super();
-		this.predicate = predicate;
 		this.subject = subject;
 		this.subjectKind = subjectKind;
 		this.objects.add(new PredicateMap(predicate, object, objectKind, lang, datatype));
-		this.objectKind = objectKind;
 		this.graphColumn = graphColumn;
-		this.lang = lang;
-		this.datatype = datatype;
-		this.id = ID_GEN.incrementAndGet();
+		this.name = generateName(subjectKind, objectKind, lang, datatype);
+	}
+
+	private String generateName(Kind subjectKind, Kind objectKind, String lang, IRI datatype) {
+		String name = "_" + ID_GEN.incrementAndGet() + "_" + subjectKind.label() + "_" + objectKind.label();
+		name = addLangDatatype(lang, datatype, name);
+		return name;
+	}
+
+	public static String addLangDatatype(String lang, IRI datatype, String name) {
+		if (lang != null) {
+			name += "_" + lang.replace('-', '_');
+		} else if (datatype != null) {
+
+			CoreDatatype from = CoreDatatype.from(datatype);
+			if (from != null && from.isXSDDatatype()) {
+				name += "_xsd_" + datatype.getLocalName();
+			} else if (from != null && from.isRDFDatatype()) {
+				name += "_rdf_" + datatype.getLocalName();
+			} else if (from != null && from.isGEODatatype()) {
+				name += "_geo_" + datatype.getLocalName();
+			} else {
+				name += "_dt";
+			}
+		}
+		return name;
+	}
+	
+	public Table(String name, Columns subject, Kind subjectKind, List<PredicateMap> objects, Column graphColumn) {
+		super();
+		this.subject = subject;
+		this.subjectKind = subjectKind;
+		this.objects.addAll(objects);
+		this.graphColumn = graphColumn;
+		this.name = name;
 	}
 
 	public Columns subject() {
@@ -70,30 +95,19 @@ public class Table {
 				+ graphColumn.definition() + ")";
 		try (Statement ct = conn.createStatement()) {
 
-			LoggerFactory.getLogger(this.getClass()).warn("Running: " + dml);
+			log.warn("Running: " + dml);
 			ct.execute(dml);
+			if(!conn.getAutoCommit()) {
+				conn.commit();
+			}
 		}
 
 	}
 
 	public String name() {
 
-		String name = "_" + id + "_" + subjectKind.label() + "_" + objectKind.label();
-		if (lang != null) {
-			return name + "_" + lang.replace('-', '_');
-		} else if (datatype != null) {
-
-			CoreDatatype from = CoreDatatype.from(datatype);
-			if (from != null && from.isXSDDatatype()) {
-				name += "_xsd_" + datatype.getLocalName();
-			} else if (from != null && from.isRDFDatatype()) {
-				name += "_rdf_" + datatype.getLocalName();
-			} else if (from != null && from.isGEODatatype()) {
-				name += "_geo_" + datatype.getLocalName();
-			} else {
-				name += "_dt";
-			}
-		}
+		
+		
 		return name;
 	}
 
@@ -196,7 +210,7 @@ public class Table {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(datatype, graphColumn, lang, objects, objectKind, predicate, subject, subjectKind);
+		return Objects.hash(graphColumn,  objects, name, subject, subjectKind);
 	}
 
 	@Override
@@ -208,9 +222,9 @@ public class Table {
 		if (getClass() != obj.getClass())
 			return false;
 		Table other = (Table) obj;
-		return Objects.equals(datatype, other.datatype) && Objects.equals(graphColumn, other.graphColumn)
-				&& Objects.equals(lang, other.lang) && Objects.equals(objects, other.objects)
-				&& objectKind == other.objectKind && Objects.equals(predicate, other.predicate)
+		return Objects.equals(graphColumn, other.graphColumn)
+				&& Objects.equals(objects, other.objects)
+				&& name == other.name && Objects.equals(name, other.name)
 				&& Objects.equals(subject, other.subject) && subjectKind == other.subjectKind;
 	}
 

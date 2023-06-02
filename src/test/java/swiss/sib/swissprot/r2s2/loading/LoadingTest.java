@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -86,7 +87,7 @@ public class LoadingTest {
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
 			tables = new TableMerging().merge(conn_rw, tables);
 			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
-			tables = rdfTypeSplitting.split(conn_rw, tables);
+			tables = rdfTypeSplitting.split(conn_rw, tables, Map.of("rdf", RDF.NAMESPACE));
 			for (Table table : tables) {
 				IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
 			}

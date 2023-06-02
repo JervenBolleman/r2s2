@@ -40,7 +40,7 @@ public class IntroduceVirtualColumns {
 							new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
 					try (Statement ct = conn.createStatement()) {
 						String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
-								+ ",0," + lcs.length() + ')';
+								+ "," + lcs.length() + ",strlen("+column.name()+") - "+lcs.length()+")";
 						log.warn(uc);
 						
 						ct.executeUpdate(uc);
@@ -108,6 +108,9 @@ public class IntroduceVirtualColumns {
 								String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
 								log.info("dropping: " + table.name() + "." + column.name());
 								ct2.execute(dropColumn);
+								if(!conn.getAutoCommit()) {
+									conn.commit();
+								}
 							}
 						} else {
 							log.info(table.name() + '.' + column.name() + " has more than one value");

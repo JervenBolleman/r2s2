@@ -86,6 +86,7 @@ public class Loader {
 	private final File directoryToWriteToo;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen = new TemporaryIriIdMap();
 	private final Map<Integer, PredicateDirectoryWriter> predicatesDirectories = new ConcurrentHashMap<>();
+	private final Map<String, String> namespaces = new ConcurrentHashMap<>();
 	private volatile TemporaryIriIdMap temporaryGraphIdMap = new TemporaryIriIdMap();
 
 	private final ExecutorService exec = Executors.newCachedThreadPool();
@@ -159,12 +160,12 @@ public class Loader {
 		}
 		Loader wo = new Loader(directoryToWriteToo, step);
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(), new Properties())) {
-			try (java.sql.Statement update = conn_rw.createStatement()) {
-				update.executeUpdate("SET memory_limit='30GB'");
-				if(!conn_rw.getAutoCommit()) {
-					conn_rw.commit();
-				}
-			}
+//			try (java.sql.Statement update = conn_rw.createStatement()) {
+////				update.executeUpdate("SET memory_limit='30GB'");
+//				if(!conn_rw.getAutoCommit()) {
+//					conn_rw.commit();
+//				}
+//			}
 			wo.parse(lines, conn_rw);
 		}
 		return wo;
@@ -316,7 +317,7 @@ public class Loader {
 	
 		tables = new TableMerging().merge(conn_rw, tables);
 		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
-		tables = rdfTypeSplitting.split(conn_rw, tables);
+		tables = rdfTypeSplitting.split(conn_rw, tables, namespaces);
 		for (Table table : tables) {
 			IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
 		}
@@ -409,7 +410,7 @@ public class Loader {
 			TemporaryIriIdMap temporaryGraphIdMap, Connection conn_rw) throws IOException, SQLException {
 
 		PredicateDirectoryWriter predicateDirectoryWriter = new PredicateDirectoryWriter(conn_rw, temporaryGraphIdMap,
-				exec, predicate);
+				exec, predicate, namespaces);
 		return predicateDirectoryWriter;
 	}
 
@@ -461,13 +462,15 @@ public class Loader {
 		private final Lock lock = new ReentrantLock();
 		private final TempIriId predicate;
 		private final Connection conn_rw;
+		private final Map<String, String> namespaces;
 
 		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap,
-				ExecutorService exec, TempIriId predicate) throws IOException, SQLException {
+				ExecutorService exec, TempIriId predicate, Map<String, String> namespaces) throws IOException, SQLException {
 			this.conn_rw = conn_rw;
 			this.tempraphIdMap = temporaryGraphIdMap;
 			this.exec = exec;
 			this.predicate = predicate;
+			this.namespaces = namespaces;
 		}
 
 		/**
@@ -489,7 +492,7 @@ public class Loader {
 					if (findAny != null)
 						findAny.write(statement);
 					else {
-						findAny = new LoadIntoTable(statement, conn_rw, tempraphIdMap, predicate);
+						findAny = new LoadIntoTable(statement, conn_rw, tempraphIdMap, predicate, namespaces);
 						targets.put(key, findAny);
 						findAny.write(statement);
 					}
@@ -541,8 +544,7 @@ public class Loader {
 
 		@Override
 		public void handleNamespace(String prefix, String uri) throws RDFHandlerException {
-			// TODO Auto-generated method stub
-
+			namespaces.put(prefix, uri);
 		}
 
 		@Override

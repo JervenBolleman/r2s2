@@ -13,6 +13,8 @@ package swiss.sib.swissprot.r2s2.loading;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,6 +34,7 @@ import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
 import swiss.sib.swissprot.r2s2.sql.Datatypes;
+import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 final class LoadIntoTable implements AutoCloseable {
@@ -52,8 +55,8 @@ final class LoadIntoTable implements AutoCloseable {
 	private volatile int c = 1;
 	private final Lock lock = new ReentrantLock();
 
-	LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate)
-			throws IOException, SQLException {
+	LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate,
+			Map<String, String> namespaces) throws IOException, SQLException {
 		this.conn = (DuckDBConnection) ((DuckDBConnection) masterConn).duplicate();
 		this.tgid = tgid;
 		this.subjectKind = Kind.of(template.getSubject());
@@ -70,16 +73,50 @@ final class LoadIntoTable implements AutoCloseable {
 		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_" + predicate.id());
 		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_" + predicate.id());
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
-		table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
-				datatype);
-		table.create(conn);
+		final String tableName = tableName(predicate, namespaces, objectKind, lang, datatype);
+		this.table = makeTable(predicate, subjectColumns, objectColumns, graphColumn, tableName);
+
 		this.appender = conn.createAppender("", table.name());
+	}
+
+	public Table makeTable(TempIriId predicate, Columns subjectColumns, Columns objectColumns, Column graphColumn,
+			final String tableName) throws SQLException {
+		Table table;
+		try {
+			if (tableName != null) {
+				PredicateMap pm = new PredicateMap(predicate, objectColumns, objectKind, lang, datatype);
+				table = new Table(tableName, subjectColumns, subjectKind, List.of(pm), graphColumn);
+			} else
+				table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
+						datatype);
+			table.create(conn);
+		} catch (SQLException e) {
+			// Can happen if the table name is not valid.
+			table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
+					datatype);
+			table.create(conn);
+		}
+		return table;
+	}
+
+	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind objectKind2, String lang2,
+			IRI datatype2) {
+		String predicateS = predicate.stringValue();
+		for (Map.Entry<String, String> en : namespaces.entrySet()) {
+			if (predicateS.startsWith(en.getValue()) && ! en.getKey().isEmpty()) {
+				final String preName = en.getKey() + "_" + predicateS.substring(en.getValue().length());
+				return Table.addLangDatatype(lang2, datatype2,
+						preName);
+			}
+		}
+		return null;
 	}
 
 	@Override
 	public void close() throws SQLException {
 		if (!closed) {
 			this.appender.close();
+			logger.info("Closed " + table.name() + " now has " + c + " rows");
 			this.conn.close();
 		}
 		closed = true;
