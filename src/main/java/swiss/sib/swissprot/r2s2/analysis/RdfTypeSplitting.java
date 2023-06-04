@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -60,61 +59,71 @@ public class RdfTypeSplitting {
 		if (notVirtual.isEmpty()) {
 			log.info("Nothing to be done for class cracking");
 		} else {
+			String columns = notVirtual.stream().map(Column::name).collect(Collectors.joining(", "));
 			try (Statement stat = conn.createStatement()) {
-				String columns = notVirtual.stream().map(Column::name).collect(Collectors.joining(", "));
 
 				String dc = "SELECT DISTINCT " + columns + " FROM " + t.name();
 				log.info("Executing " + dc);
 				try (ResultSet rs = stat.executeQuery(dc)) {
 					while (rs.next()) {
-						Table newTable;
-						try {
-							String tableName = newTableName(notVirtual, rs, namespaces);
-							newTable = makeNewTable(t, conn, pm, tableName);
-						} catch (SQLException e) {
-							//Can happen if the table name is not valid.
-							newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new Columns(t.subject().getColumns()),
-									t.subjectKind(), List.of(pm), t.graph());
-						}
-						newTables.add(newTable);
-						String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
-						for (int j = 0; j < notVirtual.size(); j++) {
-							Column c = notVirtual.get(j);
-							in += c.name() + " = '" + rs.getString(j + 1) + "'";
-							if (j != notVirtual.size() - 1) {
-								in += " AND ";
-							}
-						}
-						in += ")";
-						log.info("Executing " + in);
-						try (Statement update = conn.createStatement()) {
-							update.executeUpdate(in);
-							if (!conn.getAutoCommit()) {
-								conn.commit();
-							}
-						}
+						createNewTable(t, conn, pm, namespaces, newTables, notVirtual, rs);
 					}
 				}
-
 				iterator.remove();
-				try (Statement update = conn.createStatement()) {
-					String drop = "DROP TABLE " + t.name();
-					log.info("Executing" + drop);
-					update.execute(drop);
-					if (!conn.getAutoCommit()) {
-						conn.commit();
-					}
-				}
 			} catch (SQLException e) {
 				throw new RuntimeException(e);
 			}
+			dropOldTable(t, conn);
 		}
 		return newTables;
 	}
 
+	public void dropOldTable(Table t, Connection conn) {
+		try (Statement update = conn.createStatement()) {
+			String drop = "DROP TABLE " + t.name();
+			log.info("Executing " + drop);
+			update.execute(drop);
+			if (!conn.getAutoCommit()) {
+				conn.commit();
+			}
+		} catch (SQLException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	public void createNewTable(Table t, Connection conn, PredicateMap pm, Map<String, String> namespaces,
+			List<Table> newTables, List<Column> notVirtual, ResultSet rs) throws SQLException {
+		Table newTable;
+		try {
+			String tableName = newTableName(notVirtual, rs, namespaces);
+			newTable = makeNewTable(t, conn, pm, tableName);
+		} catch (SQLException e) {
+			// Can happen if the table name is not valid.
+			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new Columns(t.subject().getColumns()),
+					t.subjectKind(), List.of(pm), t.graph());
+		}
+		newTables.add(newTable);
+		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
+		for (int j = 0; j < notVirtual.size(); j++) {
+			Column c = notVirtual.get(j);
+			in += c.name() + " = '" + rs.getString(j + 1) + "'";
+			if (j != notVirtual.size() - 1) {
+				in += " AND ";
+			}
+		}
+		in += ")";
+		log.info("Executing " + in);
+		try (Statement update = conn.createStatement()) {
+			update.executeUpdate(in);
+			if (!conn.getAutoCommit()) {
+				conn.commit();
+			}
+		}
+	}
+
 	private Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
-		Table newTable = new Table("type_" + tableName, new Columns(t.subject().getColumns()),
-				t.subjectKind(), List.of(pm), t.graph());
+		Table newTable = new Table("type_" + tableName, new Columns(t.subject().getColumns()), t.subjectKind(),
+				List.of(pm), t.graph());
 		newTable.create(conn);
 		return newTable;
 	}

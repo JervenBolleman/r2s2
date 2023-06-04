@@ -73,7 +73,7 @@ final class LoadIntoTable implements AutoCloseable {
 		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_" + predicate.id());
 		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_" + predicate.id());
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
-		final String tableName = tableName(predicate, namespaces, objectKind, lang, datatype);
+		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
 		this.table = makeTable(predicate, subjectColumns, objectColumns, graphColumn, tableName);
 
 		this.appender = conn.createAppender("", table.name());
@@ -99,14 +99,13 @@ final class LoadIntoTable implements AutoCloseable {
 		return table;
 	}
 
-	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind objectKind2, String lang2,
+	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind subjectKind, Kind objectKind2, String lang2,
 			IRI datatype2) {
 		String predicateS = predicate.stringValue();
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {
 			if (predicateS.startsWith(en.getValue()) && ! en.getKey().isEmpty()) {
 				final String preName = en.getKey() + "_" + predicateS.substring(en.getValue().length());
-				return Table.addLangDatatype(lang2, datatype2,
-						preName);
+				return Table.generateName(preName, subjectKind, objectKind2, lang2, datatype2);
 			}
 		}
 		return null;
@@ -172,6 +171,7 @@ final class LoadIntoTable implements AutoCloseable {
 	public void write(Statement statement) throws SQLException {
 		Resource subjectS = statement.getSubject();
 		Value objectS = statement.getObject();
+		assert statement.getPredicate().equals(predicate);
 		if (statement.getContext() != null) {
 			int tempGraphId = getTemporaryGraphId(statement);
 			write(subjectS, objectS, tempGraphId);

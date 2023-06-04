@@ -544,7 +544,7 @@ public class Loader {
 
 		@Override
 		public void handleNamespace(String prefix, String uri) throws RDFHandlerException {
-			namespaces.put(prefix, uri);
+			namespaces.putIfAbsent(prefix, uri);
 		}
 
 		@Override

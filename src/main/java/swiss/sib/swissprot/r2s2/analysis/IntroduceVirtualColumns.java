@@ -58,7 +58,7 @@ public class IntroduceVirtualColumns {
 		if (!column.isVirtual() && Datatypes.TEXT == column.datatype()) {
 			try (Statement ct = conn.createStatement()) {
 				String dc = "SELECT " + column.name() + " FROM " + table.name() + "";
-
+				log.info("Running "+dc);
 				try (ResultSet executeQuery = ct.executeQuery(dc)) {
 					boolean first = executeQuery.next();
 					assert first;
@@ -66,15 +66,18 @@ public class IntroduceVirtualColumns {
 					int pmax = value.length();
 					while (executeQuery.next()) {
 						String next = executeQuery.getString(1);
-
-						int max = Math.min(next.length(), pmax);
-						int csl = 0;
-						while (csl < max && next.charAt(csl) == value.charAt(csl)) {
-							csl++;
-						}
-						pmax = csl;
-						if (pmax == 0) {
-							return null;
+						if (next != null) {
+							//After table merging some fields might be null and that is ok 
+							// they need to be skipped.
+							int max = Math.min(next.length(), pmax);
+							int csl = 0;
+							while (csl < max && next.charAt(csl) == value.charAt(csl)) {
+								csl++;
+							}
+							pmax = csl;
+							if (pmax == 0) {
+								return null;
+							}
 						}
 					}
 					String lcs = value.substring(0, pmax);

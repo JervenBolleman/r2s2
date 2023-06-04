@@ -17,7 +17,8 @@ import swiss.sib.swissprot.r2s2.loading.LoaderBlankNode;
 
 public class Columns {
 	public static final String DATATYPE = "_datatype";
-	public static final String VALUE = "_value";
+	public static final String LIT_VALUE = "_litvalue";
+	public static final String LANG_VALUE = "_langvalue";
 	public static final String LANG = "_lang";
 	public static final String ID = "_id";
 	public static final String PARTS = "_parts";
@@ -43,10 +44,10 @@ public class Columns {
 		case LITERAL:
 			if (lang != null) {
 				return new Columns(
-						List.of(new Column(prefix + LANG, Datatypes.TEXT), new Column(prefix + VALUE, Datatypes.TEXT)));
+						List.of(new Column(prefix + LANG, Datatypes.TEXT), new Column(prefix + LANG_VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
 				return new Columns(List.of(new Column(prefix + DATATYPE, Datatypes.TEXT),
-						new Column(prefix + VALUE, Datatypes.TEXT)));
+						new Column(prefix + LIT_VALUE, Datatypes.TEXT)));
 			} else {
 				return null;
 			}

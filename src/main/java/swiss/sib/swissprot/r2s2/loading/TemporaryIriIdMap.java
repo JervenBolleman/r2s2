@@ -22,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -37,7 +38,8 @@ public class TemporaryIriIdMap {
 	private static final Logger logger = LoggerFactory.getLogger(TemporaryIriIdMap.class);
 	private final Set<TempIriId> graphIriInOrder = Collections.synchronizedSet(new LinkedHashSet<>());
 	private final Map<IRI, Integer> graphIriOrder = new ConcurrentHashMap<>();
-	private final Map<Integer, IRI> iriOrderGraph = new ConcurrentHashMap<>();
+	private final Map<Integer,IRI> iriOrderGraph = new ConcurrentHashMap<>();
+	private final AtomicInteger ids = new AtomicInteger(0);
 	private final Lock lock = new ReentrantLock();
 
 	public int temporaryId(Resource r) {
@@ -55,11 +57,10 @@ public class TemporaryIriIdMap {
 				try {
 					lock.lock();
 					if (!graphIriInOrder.contains(graphIri)) {
-						int tempId = graphIriInOrder.size();
-						TempIriId temp = new TempIriId((IRI) graphIri, tempId++);
+						TempIriId temp = new TempIriId((IRI) graphIri, ids.getAndIncrement());
 						graphIriInOrder.add(temp);
-						graphIriOrder.put(temp, tempId);
-						iriOrderGraph.put(tempId, temp);
+						graphIriOrder.put(temp, temp.id());
+						iriOrderGraph.put(temp.id(), temp);
 						return temp;
 					}
 					got = graphIriOrder.get(graphIri);
@@ -151,8 +152,11 @@ public class TemporaryIriIdMap {
 				return true;
 			if (obj == null)
 				return false;
-			if (obj instanceof TempIriId)
-				return id == ((TempIriId) obj).id;
+			if (obj instanceof TempIriId) {
+				boolean same = (id == ((TempIriId) obj).id);
+				assert same == wrapped.equals(obj);
+				return same;
+			}
 			if (obj instanceof IRI other)
 				return wrapped.equals(other);
 			return false;

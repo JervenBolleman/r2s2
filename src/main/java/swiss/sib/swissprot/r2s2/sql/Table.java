@@ -38,11 +38,11 @@ public class Table {
 		this.subjectKind = subjectKind;
 		this.objects.add(new PredicateMap(predicate, object, objectKind, lang, datatype));
 		this.graphColumn = graphColumn;
-		this.name = generateName(subjectKind, objectKind, lang, datatype);
+		this.name = generateName("_pred_" + ID_GEN.incrementAndGet(), subjectKind, objectKind, lang, datatype);
 	}
 
-	private String generateName(Kind subjectKind, Kind objectKind, String lang, IRI datatype) {
-		String name = "_" + ID_GEN.incrementAndGet() + "_" + subjectKind.label() + "_" + objectKind.label();
+	public static String generateName(String name, Kind subjectKind, Kind objectKind, String lang, IRI datatype) {
+		name = name + "_" + subjectKind.label() + "_" + objectKind.label();
 		name = addLangDatatype(lang, datatype, name);
 		return name;
 	}
@@ -168,7 +168,9 @@ public class Table {
 					columnDefinition(model, vf, R2RML.datatype, map, column);
 				} else if (column.name().endsWith(Columns.LANG)) {
 					columnDefinition(model, vf, R2RML.language, map, column);
-				} else if (column.name().endsWith(Columns.VALUE)) {
+				} else if (column.name().endsWith(Columns.LANG_VALUE)) {
+					columnDefinition(model, vf, R2RML.template, map, column);
+				} else if (column.name().endsWith(Columns.LIT_VALUE)) {
 					columnDefinition(model, vf, R2RML.template, map, column);
 				}
 			}
