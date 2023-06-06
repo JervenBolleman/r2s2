@@ -69,8 +69,6 @@ public class TableMerging {
 
 	private void merge(Table tableToMergeInto, Table next, Connection conn) throws SQLException {
 		log.info("Merging " + next.name() + " into " + tableToMergeInto.name());
-		String subj = tableToMergeInto.subject().getColumns().stream().filter(c -> !c.isVirtual())
-				.map(c -> tableToMergeInto.name() + '.' + c.name()).collect(Collectors.joining(", "));
 		try (var stat = conn.createStatement()) {
 			for (PredicateMap pm : next.objects()) {
 				List<Column> toMerge = new ArrayList<>();

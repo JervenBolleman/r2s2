@@ -66,6 +66,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
+import swiss.sib.swissprot.r2s2.analysis.OptimizeForDatatype;
 import swiss.sib.swissprot.r2s2.analysis.OptimizeForLongestCommonSubstring;
 import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
 import swiss.sib.swissprot.r2s2.analysis.TableMerging;
@@ -326,6 +327,13 @@ public class Loader {
 		checkpoint(conn_rw);
 		for (Table table : tables) {
 			IntroduceVirtualColumns.optimizeForR2RML(conn_rw, table);
+		}
+		checkpoint(conn_rw);
+		for (Table table : tables) {
+			try (Connection conn = ((DuckDBConnection) conn_rw).duplicate()) {
+				OptimizeForDatatype.optimizeForR2RML(conn, table);
+				checkpoint(conn);
+			}
 		}
 		checkpoint(conn_rw);
 		for (Table table : tables) {

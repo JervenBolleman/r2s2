@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterFactory;
@@ -30,6 +31,8 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
+import swiss.sib.swissprot.r2s2.analysis.OptimizeForDatatype;
+import swiss.sib.swissprot.r2s2.analysis.OptimizeForLongestCommonSubstring;
 import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
 import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
@@ -54,6 +57,8 @@ public class LoadingTest {
 				vf.createStatement(RDF.BAG, RDFS.LABEL, vf.createLiteral("杭州", "cz")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala", "en-UK")),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala lala", "en-UK")),
+				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-23", XSD.DATE)),
+				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-22", XSD.DATE)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
 		Optional<RDFWriterFactory> optional = RDFWriterRegistry.getInstance().get(RDFFormat.RDFXML);
 		File input = temp.newFile("input.rdf");
@@ -90,6 +95,8 @@ public class LoadingTest {
 			tables = rdfTypeSplitting.split(conn_rw, tables, Map.of("rdf", RDF.NAMESPACE));
 			for (Table table : tables) {
 				IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
+				OptimizeForLongestCommonSubstring.optimizeForR2RML( conn_rw, table);
+				OptimizeForDatatype.optimizeForR2RML( conn_rw, table);
 			}
 		}
 		R2RMLFromTables.write(tables, System.out);

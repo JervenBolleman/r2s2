@@ -10,7 +10,7 @@ public enum Datatypes {
 		this.sql = sql;
 	}
 
-	String label() {
+	public String label() {
 		return sql;
 	}
 }

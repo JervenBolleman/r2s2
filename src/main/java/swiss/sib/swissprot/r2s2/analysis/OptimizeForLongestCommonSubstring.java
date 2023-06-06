@@ -21,7 +21,8 @@ public class OptimizeForLongestCommonSubstring {
 	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
 		replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);
 		for (PredicateMap p : table.objects()) {
-			replaceLongestStartingPrefixWithVirtual(table, p.columns().getColumns(), conn);
+			if (p.datatype() != null && p.lang() != null)
+				replaceLongestStartingPrefixWithVirtual(table, p.columns().getColumns(), conn);
 		}
 	}
 

@@ -1,6 +1,8 @@
 package swiss.sib.swissprot.r2s2.sql;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -11,6 +13,7 @@ import org.duckdb.DuckDBAppender;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.base.CoreDatatype;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.loading.LoaderBlankNode;
@@ -46,14 +49,35 @@ public class Columns {
 				return new Columns(
 						List.of(new Column(prefix + LANG, Datatypes.TEXT), new Column(prefix + LANG_VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
-				return new Columns(List.of(new Column(prefix + DATATYPE, Datatypes.TEXT),
-						new Column(prefix + LIT_VALUE, Datatypes.TEXT)));
+				return new Columns(List.of(
+						new Column(prefix + datatype(datatype)+DATATYPE, Datatypes.TEXT),
+						new Column(prefix + datatype(datatype)+LIT_VALUE, Datatypes.TEXT)));
 			} else {
 				return null;
 			}
 		case TRIPLE:
 		default:
 			throw new UnsupportedOperationException();
+		}
+	}
+
+	private static String datatype(IRI datatype2) {
+		CoreDatatype cdt = CoreDatatype.from(datatype2);
+		if (cdt != null) {
+			if (cdt.isXSDDatatype()) {
+				return "_xsd_"+datatype2.getLocalName();
+			} else if (cdt.isRDFDatatype()) {
+				return "_rdf_"+datatype2.getLocalName();
+			} else if (cdt.isGEODatatype()) {
+				return "_geo_"+datatype2.getLocalName();
+			}
+		}
+		byte[] encode;
+		try {
+			encode = Base64.getUrlEncoder().encode(datatype2.stringValue().getBytes(StandardCharsets.UTF_8));
+			return new String("_"+encode);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
 		}
 	}
 
