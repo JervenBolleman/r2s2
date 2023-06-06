@@ -66,6 +66,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
+import swiss.sib.swissprot.r2s2.analysis.OptimizeForLongestCommonSubstring;
 import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
 import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.loading.LoadIntoTable.TargetKey;
@@ -130,6 +131,7 @@ public class Loader {
 		if (!directoryToWriteToo.exists()) {
 			directoryToWriteToo.getParentFile().mkdirs();
 		}
+		namespaces.putIfAbsent("up", "http://purl.uniprot.org/core/");
 		int procs = Runtime.getRuntime().availableProcessors();
 		int estimateParsingProcessors = estimateParsingProcessors(procs);
 		parsePresureLimit = new Semaphore(estimateParsingProcessors);
@@ -159,7 +161,8 @@ public class Loader {
 			throw new IllegalStateException(e1);
 		}
 		Loader wo = new Loader(directoryToWriteToo, step);
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(), new Properties())) {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(),
+				new Properties())) {
 //			try (java.sql.Statement update = conn_rw.createStatement()) {
 ////				update.executeUpdate("SET memory_limit='30GB'");
 //				if(!conn_rw.getAutoCommit()) {
@@ -293,7 +296,7 @@ public class Loader {
 			logger.info("Starting step 1");
 			stepOne(lines, conn_rw);
 		}
-		
+
 		if (step == 2 || step == 0) {
 			logger.info("Starting step 2");
 			stepTwo(conn_rw);
@@ -310,19 +313,37 @@ public class Loader {
 		writeOutPredicates(closers, conn_rw);
 		temporaryGraphIdMap.toDisk(directoryToWriteToo);
 		logger.info("step 1 took " + Duration.between(start, Instant.now()));
+		checkpoint(conn_rw);
 	}
-	
+
 	private void stepTwo(Connection conn_rw) throws SQLException {
 		List<Table> tables = this.tables();
-	
+
 		tables = new TableMerging().merge(conn_rw, tables);
+		checkpoint(conn_rw);
 		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
 		tables = rdfTypeSplitting.split(conn_rw, tables, namespaces);
+		checkpoint(conn_rw);
 		for (Table table : tables) {
-			IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
+			IntroduceVirtualColumns.optimizeForR2RML(conn_rw, table);
 		}
-	
+		checkpoint(conn_rw);
+		for (Table table : tables) {
+			try (Connection conn = ((DuckDBConnection) conn_rw).duplicate()) {
+				OptimizeForLongestCommonSubstring.optimizeForR2RML(conn, table);
+				checkpoint(conn);
+			}
+		}
+		checkpoint(conn_rw);
+
 		R2RMLFromTables.write(tables, System.out);
+	}
+
+	private void checkpoint(Connection conn_rw) throws SQLException {
+		try (java.sql.Statement s = conn_rw.createStatement()) {
+			final boolean execute = s.execute("checkpoint");
+			logger.info("Checkpoint returned: " + execute);
+		}
 	}
 
 	private void writeOutPredicates(List<Future<SQLException>> closers, Connection conn_rw)
@@ -465,7 +486,8 @@ public class Loader {
 		private final Map<String, String> namespaces;
 
 		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap,
-				ExecutorService exec, TempIriId predicate, Map<String, String> namespaces) throws IOException, SQLException {
+				ExecutorService exec, TempIriId predicate, Map<String, String> namespaces)
+				throws IOException, SQLException {
 			this.conn_rw = conn_rw;
 			this.tempraphIdMap = temporaryGraphIdMap;
 			this.exec = exec;

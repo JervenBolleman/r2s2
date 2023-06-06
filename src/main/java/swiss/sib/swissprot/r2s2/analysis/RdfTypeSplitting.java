@@ -135,8 +135,9 @@ public class RdfTypeSplitting {
 			typeIri += rs.getObject(i).toString();
 		}
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {
-			if (typeIri.startsWith(en.getValue()))
+			if (typeIri.startsWith(en.getValue()) && ! en.getKey().isEmpty()) {
 				return en.getKey() + "_" + typeIri.substring(en.getValue().length());
+			}
 		}
 		return "type_" + TYPE_ID.incrementAndGet();
 	}

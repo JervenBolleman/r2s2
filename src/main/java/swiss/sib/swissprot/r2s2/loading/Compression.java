@@ -17,8 +17,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ProcessBuilder.Redirect;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.zip.GZIPInputStream;
 
 import org.tukaani.xz.XZInputStream;
@@ -116,9 +114,6 @@ public enum Compression {
 			return pb;
 		}
 	};
-
-	private static final ExecutorService execs = Executors
-			.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() / 2));
 
 	private final String extension;
 
