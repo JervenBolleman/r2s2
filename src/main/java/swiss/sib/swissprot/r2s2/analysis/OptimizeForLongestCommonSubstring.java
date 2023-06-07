@@ -31,7 +31,7 @@ public class OptimizeForLongestCommonSubstring {
 		int max = columns.size();
 		for (int i = 0; i < max; i++) {
 			Column column = columns.get(i);
-			if (!column.isVirtual()) {
+			if (!column.isVirtual() && column.datatype() == null) {
 				String lcs = findLongestCommonPrefixString(table, conn, column);
 				if (lcs != null) {
 					columns.add(columns.indexOf(column),

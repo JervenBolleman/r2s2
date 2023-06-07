@@ -23,9 +23,10 @@ public class OptimizeForDatatype {
 			for (Column c : p.columns().getColumns()) {
 				alterForDatatype(conn, table, p, c, XSD.INT, Datatypes.BIGINT, "");
 				alterForDatatype(conn, table, p, c, XSD.LONG, Datatypes.BIGINT, "");
-				alterForDatatype(conn, table, p, c, XSD.BOOLEAN, Datatypes.BOOLEAN, " USING (CASE WHEN "+c.name() + "='true' THEN true ELSE false END)");
-				alterForDatatype(conn, table, p, c, XSD.DOUBLE, Datatypes.NUMERIC, "");
-				alterForDatatype(conn, table, p, c, XSD.FLOAT, Datatypes.NUMERIC, "");
+				alterForDatatype(conn, table, p, c, XSD.BOOLEAN, Datatypes.BOOLEAN,
+						" USING (CASE WHEN " + c.name() + "='true' THEN true ELSE false END)");
+				alterForDatatype(conn, table, p, c, XSD.DOUBLE, Datatypes.DOUBLE, "");
+				alterForDatatype(conn, table, p, c, XSD.FLOAT, Datatypes.FLOAT, "");
 				alterForDatatype(conn, table, p, c, XSD.DATE, Datatypes.DATE, "");
 			}
 		}
@@ -34,21 +35,25 @@ public class OptimizeForDatatype {
 	public static void alterForDatatype(Connection conn, Table table, PredicateMap p, Column c, final IRI xsd,
 			final Datatypes sql, String cast) throws SQLException {
 		if (c.isPhysical() && c.name().endsWith(Columns.LIT_VALUE)) {
-			if (xsd.equals(p.datatype())){
+			if (xsd.equals(p.datatype())) {
 				alterTableTo(table, c, sql, conn, cast);
 			}
 		}
 	}
 
-	private static void alterTableTo(Table table, Column c, Datatypes bigint, Connection conn, String cast) throws SQLException {
+	private static void alterTableTo(Table table, Column c, Datatypes dt, Connection conn, String cast)
+			throws SQLException {
 //		debug(table, c, conn);
+		final String sql = "ALTER TABLE " + table.name() + " ALTER " + c.name() + " TYPE " + dt.label() + cast;
 		try (Statement stat = conn.createStatement()) {
-			final String sql = "ALTER TABLE " + table.name() + " ALTER " + c.name() + " TYPE " + bigint.label()+ cast;
 			logger.info("RUNNING " + sql);
 			stat.execute(sql);
 			if (!conn.getAutoCommit()) {
 				conn.commit();
 			}
+		} catch (SQLException e) {
+			logger.info(
+					"FAILED to convert column:" + table.name() + '.' + c.name() + " to a " + c + " using cast:" + cast);
 		}
 	}
 

@@ -34,6 +34,7 @@ import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
 import swiss.sib.swissprot.r2s2.sql.Datatypes;
+import swiss.sib.swissprot.r2s2.sql.Naming;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -70,8 +71,8 @@ final class LoadIntoTable implements AutoCloseable {
 			lang = lit.getLanguage().orElse(null);
 			datatype = lit.getDatatype();
 		}
-		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_" + predicate.id());
-		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_" + predicate.id());
+		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_", namespaces,predicate);
+		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_",namespaces, predicate);
 		Column graphColumn = new Column("graph", Datatypes.BIGINT);
 		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
 		this.table = makeTable(predicate, subjectColumns, objectColumns, graphColumn, tableName);
@@ -101,14 +102,13 @@ final class LoadIntoTable implements AutoCloseable {
 
 	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind subjectKind, Kind objectKind2, String lang2,
 			IRI datatype2) {
-		String predicateS = predicate.stringValue();
-		for (Map.Entry<String, String> en : namespaces.entrySet()) {
-			if (predicateS.startsWith(en.getValue()) && ! en.getKey().isEmpty()) {
-				final String preName = en.getKey() + "_" + predicateS.substring(en.getValue().length());
-				return Table.generateName(preName, subjectKind, objectKind2, lang2, datatype2);
-			}
+		
+		final String preName = Naming.iriToSqlNamePart(namespaces, predicate);
+		if(preName != null) {
+			return Table.generateName(preName, subjectKind, objectKind2, lang2, datatype2);
+		} else {
+			return null;
 		}
-		return null;
 	}
 
 	@Override

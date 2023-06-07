@@ -36,9 +36,8 @@ import org.slf4j.LoggerFactory;
 
 public class TemporaryIriIdMap {
 	private static final Logger logger = LoggerFactory.getLogger(TemporaryIriIdMap.class);
-	private final Set<TempIriId> graphIriInOrder = Collections.synchronizedSet(new LinkedHashSet<>());
-	private final Map<IRI, Integer> graphIriOrder = new ConcurrentHashMap<>();
-	private final Map<Integer,IRI> iriOrderGraph = new ConcurrentHashMap<>();
+	private final Map<TempIriId, Integer> graphIriOrder = new ConcurrentHashMap<>();
+	private final Map<Integer,TempIriId> iriOrderGraph = new ConcurrentHashMap<>();
 	private final AtomicInteger ids = new AtomicInteger(0);
 	private final Lock lock = new ReentrantLock();
 
@@ -56,9 +55,8 @@ public class TemporaryIriIdMap {
 			if (got == null) {
 				try {
 					lock.lock();
-					if (!graphIriInOrder.contains(graphIri)) {
+					if (!graphIriOrder.containsKey(graphIri)) {
 						TempIriId temp = new TempIriId((IRI) graphIri, ids.getAndIncrement());
-						graphIriInOrder.add(temp);
 						graphIriOrder.put(temp, temp.id());
 						iriOrderGraph.put(temp.id(), temp);
 						return temp;
@@ -76,7 +74,7 @@ public class TemporaryIriIdMap {
 	}
 
 	public Collection<TempIriId> iris() {
-		return graphIriInOrder;
+		return graphIriOrder.keySet();
 	}
 
 	public IRI iriFromTempIriId(int id) {
@@ -85,12 +83,6 @@ public class TemporaryIriIdMap {
 
 	public Integer parseInt(String s) {
 		return Integer.parseUnsignedInt(s, 16);
-	}
-
-	public void toDisk(File rootDir) throws IOException {
-		Files.writeString(extracted(rootDir).toPath(),
-				graphIriInOrder.stream().map(IRI::stringValue).collect(Collectors.joining("\n")),
-				StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
 	}
 
 	public static TemporaryIriIdMap fromDisk(File rootDir) throws IOException {

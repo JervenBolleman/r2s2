@@ -22,6 +22,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,13 +49,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.duckdb.DuckDBConnection;
-
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFHandler;
@@ -133,6 +137,9 @@ public class Loader {
 			directoryToWriteToo.getParentFile().mkdirs();
 		}
 		namespaces.putIfAbsent("up", "http://purl.uniprot.org/core/");
+		namespaces.putIfAbsent(RDF.PREFIX, RDF.NAMESPACE);
+		namespaces.putIfAbsent(RDFS.PREFIX, RDFS.NAMESPACE);
+		namespaces.putIfAbsent(XSD.PREFIX, XSD.NAMESPACE);
 		int procs = Runtime.getRuntime().availableProcessors();
 		int estimateParsingProcessors = estimateParsingProcessors(procs);
 		parsePresureLimit = new Semaphore(estimateParsingProcessors);
@@ -162,17 +169,21 @@ public class Loader {
 			throw new IllegalStateException(e1);
 		}
 		Loader wo = new Loader(directoryToWriteToo, step);
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(),
-				new Properties())) {
+		final String tempPath = tempPath(directoryToWriteToo);
+
 //			try (java.sql.Statement update = conn_rw.createStatement()) {
 ////				update.executeUpdate("SET memory_limit='30GB'");
 //				if(!conn_rw.getAutoCommit()) {
 //					conn_rw.commit();
 //				}
 //			}
-			wo.parse(lines, conn_rw);
-		}
+		wo.parse(lines, tempPath);
+
 		return wo;
+	}
+
+	public static String tempPath(File directoryToWriteToo) {
+		return directoryToWriteToo.getAbsolutePath() + ".loading-tmp";
 	}
 
 	private Set<Table> parseFilesIntoPerPredicateType(List<String> lines, List<Future<?>> toRun, CountDownLatch latch,
@@ -291,20 +302,33 @@ public class Loader {
 		return new Handler(temporaryGraphIdMap.temporaryIriId(graph), conn_rw);
 	}
 
-	public void parse(List<String> lines, Connection conn_rw) throws IOException, SQLException {
+	public void parse(List<String> lines, String tempPath) throws IOException, SQLException {
 
 		if (step == 1 || step == 0) {
 			logger.info("Starting step 1");
-			stepOne(lines, conn_rw);
+			try (Connection conn_rw = openDuckDb(tempPath)) {
+				stepOne(lines, conn_rw);
+			}
 		}
 
 		if (step == 2 || step == 0) {
 			logger.info("Starting step 2");
-			stepTwo(conn_rw);
+			try (Connection conn_rw = openDuckDb(tempPath)) {
+				stepTwo(conn_rw);
+			}
+		}
+
+		if (step == 3 || step == 0) {
+			logger.info("Starting step 3, a poor mans vacuum");
+			stepThree(tempPath);
 		}
 	}
 
-	private void stepOne(List<String> lines, Connection conn_rw) throws IOException, SQLException {
+	public Connection openDuckDb(String tempPath) throws SQLException {
+		return DriverManager.getConnection("jdbc:duckdb:" + tempPath, new Properties());
+	}
+
+	void stepOne(List<String> lines, Connection conn_rw) throws IOException, SQLException {
 		Instant start = Instant.now();
 		logger.info("Starting step 1 parsing files into temporary sorted ones");
 		List<Future<SQLException>> closers = new ArrayList<>();
@@ -312,16 +336,13 @@ public class Loader {
 		CountDownLatch latch = new CountDownLatch(lines.size());
 		parseFilesIntoPerPredicateType(lines, toRun, latch, conn_rw);
 		writeOutPredicates(closers, conn_rw);
-		temporaryGraphIdMap.toDisk(directoryToWriteToo);
+		tempIriIdMapIntoTable(conn_rw, "graphs", temporaryGraphIdMap);
 		logger.info("step 1 took " + Duration.between(start, Instant.now()));
 		checkpoint(conn_rw);
 	}
 
-	private void stepTwo(Connection conn_rw) throws SQLException {
+	void stepTwo(Connection conn_rw) throws SQLException {
 		List<Table> tables = this.tables();
-
-		tables = new TableMerging().merge(conn_rw, tables);
-		checkpoint(conn_rw);
 		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
 		tables = rdfTypeSplitting.split(conn_rw, tables, namespaces);
 		checkpoint(conn_rw);
@@ -343,8 +364,52 @@ public class Loader {
 			}
 		}
 		checkpoint(conn_rw);
-
+		tables = new TableMerging().merge(conn_rw, tables);
+		checkpoint(conn_rw);
 		R2RMLFromTables.write(tables, System.out);
+	}
+
+	void stepThree(String tempPath) throws SQLException, IOException {
+		Set<String> tablesToCopy;
+		try (Connection conn_rw = openDuckDb(tempPath)) {
+			tablesToCopy = findAllPresentTables(conn_rw);
+		}
+		try (Connection conn_rw2 = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(),
+				new Properties())) {
+			removeAnySystemTables(tablesToCopy, conn_rw2);
+			try (java.sql.Statement statement = conn_rw2.createStatement()) {
+				statement.execute("ATTACH '" + tempPath(directoryToWriteToo) + "' AS source (READ_ONLY)");
+			}
+			for (String tableName : tablesToCopy) {
+				try (java.sql.Statement statement = conn_rw2.createStatement()) {
+					statement.execute("CREATE TABLE " + tableName + " AS SELECT * from source.main." + tableName);
+				}
+			}
+			checkpoint(conn_rw2);
+		}
+		Files.delete(new File(tempPath).toPath());
+	}
+
+	public void removeAnySystemTables(Set<String> tablesToCopy, Connection conn_rw2) throws SQLException {
+		try (java.sql.Statement statement = conn_rw2.createStatement()) {
+			try (ResultSet rs = statement.executeQuery("SELECT table_name FROM information_schema.tables")) {
+				while (rs.next()) {
+					tablesToCopy.remove(rs.getString(1));
+				}
+			}
+		}
+	}
+
+	public Set<String> findAllPresentTables(Connection conn_rw) throws SQLException {
+		Set<String> tablesToCopy = new HashSet<>();
+		try (java.sql.Statement statement = conn_rw.createStatement()) {
+			try (ResultSet rs = statement.executeQuery("SELECT table_name FROM information_schema.tables")) {
+				while (rs.next()) {
+					tablesToCopy.add(rs.getString(1));
+				}
+			}
+		}
+		return tablesToCopy;
 	}
 
 	private void checkpoint(Connection conn_rw) throws SQLException {
@@ -356,29 +421,32 @@ public class Loader {
 
 	private void writeOutPredicates(List<Future<SQLException>> closers, Connection conn_rw)
 			throws IOException, SQLException {
-		try (Connection conn_w_pred = ((DuckDBConnection) conn_rw).duplicate()) {
-			try (java.sql.Statement ct = conn_w_pred.createStatement()) {
-				ct.execute("CREATE OR REPLACE TABLE predicates (id INT PRIMARY KEY, iri VARCHAR)");
-			}
-			try (java.sql.Statement cs = conn_w_pred.createStatement()) {
-				cs.execute("CREATE SEQUENCE predicate_ids START 1");
-			}
-
-			for (IRI predicateI : predicatesInOrderOfSeen.iris()) {
-				try (PreparedStatement prepareStatement = conn_w_pred
-						.prepareStatement("INSERT INTO predicates VALUES (nextval('predicate_ids'), ?);")) {
-					String predicateS = predicateI.stringValue();
-					prepareStatement.setString(1, predicateS);
-					prepareStatement.execute();
-				}
-			}
-		}
+		tempIriIdMapIntoTable(conn_rw, "predicates", predicatesInOrderOfSeen);
 		for (TempIriId predicateI : predicatesInOrderOfSeen.iris()) {
 			closers.add(exec.submit(() -> closeSingle(predicateI)));
 		}
 
 		ExternalProcessHelper.waitForFutures(closers);
 		exec.shutdown();
+	}
+
+	public void tempIriIdMapIntoTable(Connection conn_rw, String tableName, TemporaryIriIdMap m) throws SQLException {
+		try (Connection conn_w_pred = ((DuckDBConnection) conn_rw).duplicate()) {
+			try (java.sql.Statement ct = conn_w_pred.createStatement()) {
+				ct.execute("CREATE OR REPLACE TABLE " + tableName + " (id INT PRIMARY KEY, iri VARCHAR)");
+			}
+
+			for (TempIriId predicateI : m.iris()) {
+				try (PreparedStatement prepareStatement = conn_w_pred
+						.prepareStatement("INSERT INTO " + tableName + " VALUES (?, ?);")) {
+					String predicateS = predicateI.stringValue();
+					prepareStatement.setInt(1, predicateI.id());
+					logger.info("Writing into " + tableName + " id:" + predicateI.id() + " iri:" + predicateS);
+					prepareStatement.setString(2, predicateS);
+					prepareStatement.execute();
+				}
+			}
+		}
 	}
 
 	private SQLException closeSingle(TempIriId predicate) {
@@ -425,7 +493,7 @@ public class Loader {
 						predicate, temporaryGraphIdMap, conn_rw);
 				predicateDirectories.put(tempPredicateId, predicateDirectoryWriter);
 			} else {
-				predicateDirectoryWriter = predicateDirectories.get(predicate);
+				predicateDirectoryWriter = predicateDirectories.get(predicate.id());
 			}
 
 		} finally {
@@ -439,7 +507,7 @@ public class Loader {
 			TemporaryIriIdMap temporaryGraphIdMap, Connection conn_rw) throws IOException, SQLException {
 
 		PredicateDirectoryWriter predicateDirectoryWriter = new PredicateDirectoryWriter(conn_rw, temporaryGraphIdMap,
-				exec, predicate, namespaces);
+				predicate, namespaces);
 		return predicateDirectoryWriter;
 	}
 
@@ -487,18 +555,15 @@ public class Loader {
 		}
 
 		private final TemporaryIriIdMap tempraphIdMap;
-		private final ExecutorService exec;
 		private final Lock lock = new ReentrantLock();
 		private final TempIriId predicate;
 		private final Connection conn_rw;
 		private final Map<String, String> namespaces;
 
-		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap,
-				ExecutorService exec, TempIriId predicate, Map<String, String> namespaces)
-				throws IOException, SQLException {
+		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap, TempIriId predicate,
+				Map<String, String> namespaces) throws IOException, SQLException {
 			this.conn_rw = conn_rw;
 			this.tempraphIdMap = temporaryGraphIdMap;
-			this.exec = exec;
 			this.predicate = predicate;
 			this.namespaces = namespaces;
 		}

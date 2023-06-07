@@ -1,9 +1,8 @@
 package swiss.sib.swissprot.r2s2.sql;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -13,7 +12,6 @@ import org.duckdb.DuckDBAppender;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Value;
-import org.eclipse.rdf4j.model.base.CoreDatatype;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.loading.LoaderBlankNode;
@@ -37,47 +35,31 @@ public class Columns {
 		return columns.stream().filter(c -> !c.isVirtual()).map(Column::definition).collect(Collectors.joining(", "));
 	}
 
-	public static Columns from(Kind kind, String lang, IRI datatype, String prefix) {
+	public static Columns from(Kind kind, String lang, IRI datatype, String prefix, Map<String, String> namespaces,
+			IRI predicate) {
+		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
 		switch (kind) {
 		case IRI:
-			return new Columns(List.of(new Column(prefix + PROTOCOL, Datatypes.TEXT),
-					new Column(prefix + HOST, Datatypes.TEXT), new Column(prefix + PARTS, Datatypes.TEXT)));
+			return new Columns(List.of(new Column(prefix + predicatePart + PROTOCOL, Datatypes.TEXT),
+					new Column(prefix + predicatePart + HOST, Datatypes.TEXT),
+					new Column(prefix + predicatePart + PARTS, Datatypes.TEXT)));
 		case BNODE:
-			return new Columns(List.of(new Column(prefix + ID, Datatypes.BIGINT)));
+			return new Columns(List.of(new Column(prefix + predicatePart + ID, Datatypes.BIGINT)));
 		case LITERAL:
 			if (lang != null) {
-				return new Columns(
-						List.of(new Column(prefix + LANG, Datatypes.TEXT), new Column(prefix + LANG_VALUE, Datatypes.TEXT)));
+				return new Columns(List.of(new Column(prefix + predicatePart + LANG, Datatypes.TEXT),
+						new Column(prefix + LANG_VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
-				return new Columns(List.of(
-						new Column(prefix + datatype(datatype)+DATATYPE, Datatypes.TEXT),
-						new Column(prefix + datatype(datatype)+LIT_VALUE, Datatypes.TEXT)));
+				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
+				Column datatypeColumn = new Column(prefix + datatypePart + DATATYPE, Datatypes.TEXT);
+				final Column valueColumn = new Column(prefix + datatypePart + LIT_VALUE, Datatypes.TEXT);
+				return new Columns(List.of(datatypeColumn, valueColumn));
 			} else {
 				return null;
 			}
 		case TRIPLE:
 		default:
 			throw new UnsupportedOperationException();
-		}
-	}
-
-	private static String datatype(IRI datatype2) {
-		CoreDatatype cdt = CoreDatatype.from(datatype2);
-		if (cdt != null) {
-			if (cdt.isXSDDatatype()) {
-				return "_xsd_"+datatype2.getLocalName();
-			} else if (cdt.isRDFDatatype()) {
-				return "_rdf_"+datatype2.getLocalName();
-			} else if (cdt.isGEODatatype()) {
-				return "_geo_"+datatype2.getLocalName();
-			}
-		}
-		byte[] encode;
-		try {
-			encode = Base64.getUrlEncoder().encode(datatype2.stringValue().getBytes(StandardCharsets.UTF_8));
-			return new String("_"+encode);
-		} catch (Exception e) {
-			throw new RuntimeException(e);
 		}
 	}
 

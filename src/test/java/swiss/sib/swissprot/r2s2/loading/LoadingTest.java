@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
-import org.duckdb.DuckDBDatabaseMetaData;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -89,7 +88,7 @@ public class LoadingTest {
 		validateRdfTypeStatementsLoaded(newFolder, tables);
 		R2RMLFromTables.write(tables, System.out);
 
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath()+".loading-tmp");) {
 			tables = new TableMerging().merge(conn_rw, tables);
 			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
 			tables = rdfTypeSplitting.split(conn_rw, tables, Map.of("rdf", RDF.NAMESPACE));
@@ -104,7 +103,7 @@ public class LoadingTest {
 	}
 
 	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath()+".loading-tmp");) {
 			for (Table t : tables) {
 				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
 					try (java.sql.Statement count = conn_rw.createStatement();
@@ -115,7 +114,7 @@ public class LoadingTest {
 					}
 
 					try (java.sql.Statement count = conn_rw.createStatement();
-							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_0_parts) FROM " + t.name())) {
+							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_rdf_type_parts) FROM " + t.name())) {
 						assertTrue(rs.next());
 						assertEquals(2, rs.getInt(1));
 						assertFalse(rs.next());
