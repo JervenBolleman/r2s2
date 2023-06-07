@@ -21,13 +21,15 @@ public class OptimizeForDatatype {
 	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
 		for (PredicateMap p : table.objects()) {
 			for (Column c : p.columns().getColumns()) {
-				alterForDatatype(conn, table, p, c, XSD.INT, Datatypes.BIGINT, "");
+				alterForDatatype(conn, table, p, c, XSD.INT, Datatypes.INTEGER, "");
+				alterForDatatype(conn, table, p, c, XSD.INTEGER, Datatypes.NUMERIC, "");
 				alterForDatatype(conn, table, p, c, XSD.LONG, Datatypes.BIGINT, "");
 				alterForDatatype(conn, table, p, c, XSD.BOOLEAN, Datatypes.BOOLEAN,
 						" USING (CASE WHEN " + c.name() + "='true' THEN true ELSE false END)");
 				alterForDatatype(conn, table, p, c, XSD.DOUBLE, Datatypes.DOUBLE, "");
 				alterForDatatype(conn, table, p, c, XSD.FLOAT, Datatypes.FLOAT, "");
 				alterForDatatype(conn, table, p, c, XSD.DATE, Datatypes.DATE, "");
+				alterForDatatype(conn, table, p, c, XSD.DECIMAL, Datatypes.NUMERIC, "");
 			}
 		}
 	}
