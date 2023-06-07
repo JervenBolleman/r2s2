@@ -9,6 +9,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
@@ -19,9 +20,11 @@ public class OptimizeForLongestCommonSubstring {
 	private static Logger log = LoggerFactory.getLogger(OptimizeForLongestCommonSubstring.class);
 
 	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
-		replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);
+		if (table.subjectKind() == Kind.IRI) {
+			replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);
+		}
 		for (PredicateMap p : table.objects()) {
-			if (p.datatype() != null && p.lang() != null)
+			if (p.objectKind() == Kind.IRI)
 				replaceLongestStartingPrefixWithVirtual(table, p.columns().getColumns(), conn);
 		}
 	}
@@ -31,14 +34,14 @@ public class OptimizeForLongestCommonSubstring {
 		int max = columns.size();
 		for (int i = 0; i < max; i++) {
 			Column column = columns.get(i);
-			if (!column.isVirtual() && column.datatype() == null) {
+			if (column.isPhysical()) {
 				String lcs = findLongestCommonPrefixString(table, conn, column);
 				if (lcs != null) {
 					columns.add(columns.indexOf(column),
 							new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
 					try (Statement ct = conn.createStatement()) {
 						String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
-								+ "," + lcs.length() + ",strlen(" + column.name() + ") - " + lcs.length() + ")";
+								+ "," + lcs.length() + ")";
 						log.warn(uc);
 
 						ct.executeUpdate(uc);
