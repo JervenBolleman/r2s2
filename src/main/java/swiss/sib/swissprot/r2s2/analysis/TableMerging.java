@@ -30,11 +30,14 @@ public class TableMerging {
 		for (Iterator<Table> iterator = tables.iterator(); iterator.hasNext();) {
 			Table t = iterator.next();
 			long size = size(t, conn);
-			long distinctSubject = distinctSubject(t, conn);
-			if (size == distinctSubject) {
-				mergeCandidates.add(t);
-			} else {
-				notMerged.add(t);
+			final List<Column> physicalColumns = physicalColumns(t);
+			if (!physicalColumns.isEmpty()) {
+				long distinctSubject = distinctSubject(t, conn, physicalColumns);
+				if (size == distinctSubject) {
+					mergeCandidates.add(t);
+				} else {
+					notMerged.add(t);
+				}
 			}
 		}
 		Map<List<Column>, List<Table>> collect = mergeCandidates.stream()
@@ -88,8 +91,8 @@ public class TableMerging {
 						.map(c -> tableToMergeInto.name() + "." + c.name() + " = " + next.name() + '.' + c.name())
 						.collect(Collectors.joining(" AND "));
 
-				String insert = "INSERT INTO " + tableToMergeInto.name() + "(" + listOfInsert + ") SELECT "+listOfInsert+" FROM "
-						+ next.name();
+				String insert = "INSERT INTO " + tableToMergeInto.name() + "(" + listOfInsert + ") SELECT "
+						+ listOfInsert + " FROM " + next.name();
 
 				String update = "UPDATE " + tableToMergeInto.name() + " SET " + toMerge.stream()
 						.map(oc -> oc.name() + " = " + next.name() + "." + oc.name()).collect(Collectors.joining(" , "))
@@ -106,13 +109,12 @@ public class TableMerging {
 				stat.execute(update);
 				stat.execute(delete);
 				stat.execute(insert);
-				if(!conn.getAutoCommit()) {
+				if (!conn.getAutoCommit()) {
 					conn.commit();
 				}
 				tableToMergeInto.objects().add(pm);
 			}
 		}
-
 	}
 
 	private long size(Table t, Connection conn) {
@@ -132,11 +134,11 @@ public class TableMerging {
 		return 0L;
 	}
 
-	private long distinctSubject(Table t, Connection conn) {
+	private long distinctSubject(Table t, Connection conn, List<Column> physicalColumns) {
 
 		try (Statement stat = conn.createStatement()) {
-			String dc = "SELECT COUNT(*) AS count FROM " + t.name() + " GROUP BY " + t.subject().getColumns().stream()
-					.filter(Column::isPhysical).map(Column::name).collect(Collectors.joining(","));
+			String dc = "SELECT COUNT(*) AS count FROM " + t.name() + " GROUP BY "
+					+ physicalColumns.stream().map(Column::name).collect(Collectors.joining(","));
 			log.info("Executing " + dc);
 			try (ResultSet rs = stat.executeQuery(dc)) {
 				while (rs.next()) {
@@ -148,5 +150,9 @@ public class TableMerging {
 		}
 
 		return 0L;
+	}
+
+	public List<Column> physicalColumns(Table t) {
+		return t.subject().getColumns().stream().filter(Column::isPhysical).collect(Collectors.toList());
 	}
 }
