@@ -1,4 +1,4 @@
-package swiss.sib.swissprot.r2s2.analysis;
+package swiss.sib.swissprot.r2s2.optimization;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
