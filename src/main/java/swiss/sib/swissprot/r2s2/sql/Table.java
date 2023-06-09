@@ -90,7 +90,7 @@ public class Table {
 		} else {
 			objectsDefinition = ", " + objectsDefinition;
 		}
-		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + objectsDefinition + ")";
+		String dml = "CREATE TABLE " + name() + " (" + subject.definition() + objectsDefinition + ")";
 		try (Statement ct = conn.createStatement()) {
 
 			log.warn("Running: " + dml);

@@ -9,6 +9,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Datatypes;
@@ -45,9 +46,7 @@ public class OptimizeForLongestCommonSubstring {
 						log.warn(uc);
 
 						ct.executeUpdate(uc);
-						if (!conn.getAutoCommit()) {
-							conn.commit();
-						}
+						DuckDBUtil.commitIfNeeded(conn);
 					}
 				}
 			}

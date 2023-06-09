@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -104,9 +105,7 @@ public class TableMerging {
 				stat.execute(update);
 				stat.execute(delete);
 				stat.execute(insert);
-				if (!conn.getAutoCommit()) {
-					conn.commit();
-				}
+				DuckDBUtil.commitIfNeeded(conn);
 				tableToMergeInto.objects().add(pm);
 			}
 		}

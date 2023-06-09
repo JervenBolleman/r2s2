@@ -33,12 +33,11 @@ import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.Naming;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
-final class LoadIntoTable implements AutoCloseable {
+public final class LoadIntoTable implements AutoCloseable {
 
 	private static final int FLUSH_EVERY_X = 1 * 1024 * 1024;
 	private static final Logger logger = LoggerFactory.getLogger(LoadIntoTable.class);
@@ -56,7 +55,7 @@ final class LoadIntoTable implements AutoCloseable {
 	private volatile int c = 1;
 	private final Lock lock = new ReentrantLock();
 
-	LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate,
+	public LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate,
 			Map<String, String> namespaces) throws IOException, SQLException {
 		this.conn = (DuckDBConnection) ((DuckDBConnection) masterConn).duplicate();
 		this.tgid = tgid;

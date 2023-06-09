@@ -10,78 +10,28 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
-import static swiss.sib.swissprot.r2s2.loading.ExternalProcessHelper.waitForProcessToBeDone;
-
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import org.duckdb.DuckDBConnection;
-import org.eclipse.rdf4j.common.exception.RDF4JException;
-import org.eclipse.rdf4j.model.BNode;
-import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
-import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
-import org.eclipse.rdf4j.rio.ParserConfig;
-import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.rio.RDFHandler;
-import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.RDFParser;
-import org.eclipse.rdf4j.rio.Rio;
-import org.eclipse.rdf4j.rio.helpers.BasicParserSettings;
-import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
-import swiss.sib.swissprot.r2s2.analysis.OptimizeForDatatype;
-import swiss.sib.swissprot.r2s2.analysis.OptimizeForLongestCommonSubstring;
-import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
-import swiss.sib.swissprot.r2s2.analysis.TableMerging;
-import swiss.sib.swissprot.r2s2.loading.LoadIntoTable.TargetKey;
-import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
+import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
+import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
+import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
+import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
-import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
-import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class Loader {
@@ -90,26 +40,15 @@ public class Loader {
 	private static final Logger logger = LoggerFactory.getLogger(Loader.class);
 	static final char fieldSep = '\t';
 
-	private static SimpleValueFactory vf = SimpleValueFactory.getInstance();
 
-	private static final AtomicLong BNODE_ID_NORMALIZER = new AtomicLong();
 	public static final long NOT_FOUND = -404;
 	private final File directoryToWriteToo;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen = new TemporaryIriIdMap();
-	private final Map<Integer, PredicateDirectoryWriter> predicatesDirectories = new ConcurrentHashMap<>();
+
 	private final Map<String, String> namespaces = new ConcurrentHashMap<>();
 	private volatile TemporaryIriIdMap temporaryGraphIdMap = new TemporaryIriIdMap();
 
-	private final ExecutorService exec = Executors.newCachedThreadPool();
-	/**
-	 * Try to select a reasonable number of concurrent parse threads to actually
-	 * run.
-	 */
-	private final Semaphore parsePresureLimit;
-	/**
-	 * Lock to protect the maps predicateInOrderOfSeen and predcateDirectories.
-	 */
-	private final Lock predicateSeenLock = new ReentrantLock();
+
 	private final int step;
 
 	/**
@@ -145,16 +84,10 @@ public class Loader {
 		namespaces.putIfAbsent(RDF.PREFIX, RDF.NAMESPACE);
 		namespaces.putIfAbsent(RDFS.PREFIX, RDFS.NAMESPACE);
 		namespaces.putIfAbsent(XSD.PREFIX, XSD.NAMESPACE);
-		int procs = Runtime.getRuntime().availableProcessors();
-		int estimateParsingProcessors = estimateParsingProcessors(procs);
-		parsePresureLimit = new Semaphore(estimateParsingProcessors);
-		logger.info("Running " + estimateParsingProcessors + " loaders ");
+		
 	}
 
-	private int estimateParsingProcessors(int procs) {
-		return Math.max(1, procs / 2);
-	}
-
+	
 	public static void main(String args[]) throws IOException, SQLException {
 		String fileDescribedToLoad = args[0];
 		File directoryToWriteToo = new File(args[1]);
@@ -164,24 +97,19 @@ public class Loader {
 		if (args.length >= 3) {
 			step = Integer.parseInt(args[2]);
 		}
-		parse(directoryToWriteToo, lines, step);
-	}
-
-	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
 		try {
 			Class.forName("org.duckdb.DuckDBDriver");
 		} catch (ClassNotFoundException e1) {
 			throw new IllegalStateException(e1);
 		}
+		parse(directoryToWriteToo, lines, step);
+	}
+
+	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
+		
 		Loader wo = new Loader(directoryToWriteToo, step);
 		final String tempPath = tempPath(directoryToWriteToo);
 
-//			try (java.sql.Statement update = conn_rw.createStatement()) {
-////				update.executeUpdate("SET memory_limit='30GB'");
-//				if(!conn_rw.getAutoCommit()) {
-//					conn_rw.commit();
-//				}
-//			}
 		wo.parse(lines, tempPath);
 
 		return wo;
@@ -191,368 +119,36 @@ public class Loader {
 		return directoryToWriteToo.getAbsolutePath() + ".loading-tmp";
 	}
 
-	private Set<Table> parseFilesIntoPerPredicateType(List<String> lines, List<Future<?>> toRun, CountDownLatch latch,
-			Connection conn_rw) throws SQLException {
-		// We shuffle to increase the likelihood different kind of files are processed
-		// at the same time.
-		// files that are different often have different sets of predicates.
-		Collections.shuffle(lines);
-
-		for (String line : lines) {
-			String[] fileGraph = line.split("\t");
-			try {
-				IRI graph = vf.createIRI(fileGraph[1]);
-				String fileName = fileGraph[0];
-				Optional<RDFFormat> parserFormatForFileName = Rio.getParserFormatForFileName(fileName);
-				if (!parserFormatForFileName.isPresent()) {
-					logger.error("Starting parsing of " + fileName + " failed because we can't guess format");
-					Failures.UNKOWN_FORMAT.exit();
-				} else {
-					logger.info("Submitting parsing of " + fileName + " at " + Instant.now() + " with format "
-							+ parserFormatForFileName.get());
-					toRun.add(
-							exec.submit(() -> parseInThread(latch, graph, fileName, parserFormatForFileName, conn_rw)));
-				}
-			} catch (ArrayIndexOutOfBoundsException e) {
-				logger.error("Error in to load file at line, do you have filename tab graph iri: " + line);
-				Failures.TO_LOAD_FILE_NOT_CORRECT.exit();
-			}
-
-		}
-		WAIT: try {
-			latch.await();
-		} catch (InterruptedException e) {
-			Thread.interrupted();
-			break WAIT;
-		}
-		for (var p : predicatesDirectories.values()) {
-			p.close();
-		}
-		Stream<LoadIntoTable> flatMap = predicatesDirectories.values().stream()
-				.map(PredicateDirectoryWriter::getTargets).flatMap(Collection::stream);
-		return flatMap.distinct().map(LoadIntoTable::table).collect(Collectors.toSet());
-	}
-
-	private void parseInThread(CountDownLatch latch, IRI graph, String fileName,
-			Optional<RDFFormat> parserFormatForFileName, Connection conn_rw) {
-		try {
-			parsePresureLimit.acquireUninterruptibly();
-			parse(this, graph, fileName, parserFormatForFileName, conn_rw);
-		} catch (IOException e) {
-			logger.error(e.getMessage(), e);
-			Failures.GENERIC_RDF_PARSE_IO_ERROR.exit();
-		} catch (Exception e) {
-			logger.error(e.getMessage(), e);
-			Failures.GENERIC_RDF_PARSE_ERROR.exit();
-		} finally {
-			parsePresureLimit.release();
-		}
-		latch.countDown();
-	}
-
-	private static void parse(Loader wo, IRI graph, String fileName, Optional<RDFFormat> parserFormatForFileName,
-			Connection conn_rw) throws IOException {
-		RDFParser parser = Rio.createParser(parserFormatForFileName.get());
-		ParserConfig pc = parser.getParserConfig();
-		pc.set(XMLParserSettings.FAIL_ON_DUPLICATE_RDF_ID, false);
-		pc.set(XMLParserSettings.FAIL_ON_INVALID_QNAME, false);
-		pc.set(XMLParserSettings.FAIL_ON_INVALID_NCNAME, false);
-		pc.set(BasicParserSettings.VERIFY_URI_SYNTAX, false);
-		// TODO support rdf-star.
-		pc.set(BasicParserSettings.PROCESS_ENCODED_RDF_STAR, false);
-		pc.setNonFatalErrors(Set.of(XMLParserSettings.FAIL_ON_DUPLICATE_RDF_ID));
-		parser.setValueFactory(SimpleValueFactory.getInstance());
-		try {
-			Instant start = Instant.now();
-			logger.info("Starting parsing of " + fileName + " at " + start);
-			parser.setRDFHandler(wo.newHandler(graph, conn_rw));
-			if (fileName.endsWith(".gz")) {
-				Process cat = Compression.GZIP.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			} else if (fileName.endsWith(".bz2")) {
-				Process cat = Compression.BZIP2.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			} else if (fileName.endsWith(".xz")) {
-				Process cat = Compression.XZ.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			} else if (fileName.endsWith(".lz4")) {
-				Process cat = Compression.LZ4.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			} else if (fileName.endsWith(".zstd") || fileName.endsWith(".zst")) {
-				Process cat = Compression.ZSTD.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			} else {
-				Process cat = Compression.NONE.decompressInExternalProcess(new File(fileName));
-				parseWithInputViaCat(graph, parser, cat);
-			}
-			Instant end = Instant.now();
-			logger.info("Finished parsing of " + fileName + " which took" + Duration.between(start, end) + "at " + end);
-		} catch (RDF4JException e) {
-			logger.error(e.getMessage() + " for " + fileName);
-		} catch (RuntimeException e) {
-			e.printStackTrace();
-			logger.error(e.getMessage() + " for " + fileName);
-		}
-	}
-
-	private static void parseWithInputViaCat(IRI graph, RDFParser parser, Process cat) throws IOException {
-
-		try (InputStream gis = cat.getInputStream(); InputStream bis = new BufferedInputStream(gis, 128 * 1024)) {
-			parser.parse(bis, graph.stringValue());
-		}
-		waitForProcessToBeDone(cat);
-	}
-
-	private RDFHandler newHandler(IRI graph, Connection conn_rw) {
-		return new Handler(temporaryGraphIdMap.temporaryIriId(graph), conn_rw);
-	}
-
 	public void parse(List<String> lines, String tempPath) throws IOException, SQLException {
-
+		List<Table> tables = null;
 		if (step == 1 || step == 0) {
 			logger.info("Starting step 1");
-			try (Connection conn_rw = openDuckDb(tempPath)) {
-				stepOne(lines, conn_rw);
-			}
+			tables = stepOne(lines, tempPath);
 		}
-
 		if (step == 2 || step == 0) {
 			logger.info("Starting step 2");
-			stepTwo(tempPath);
+			stepTwo(tempPath, tables);
 		}
-
 		if (step == 3 || step == 0) {
 			logger.info("Starting step 3, a poor mans vacuum");
 			stepThree(tempPath);
 		}
 	}
 
-	public Connection openDuckDb(String tempPath) throws SQLException {
-		return DriverManager.getConnection("jdbc:duckdb:" + tempPath, new Properties());
+	List<Table> stepOne(List<String> lines, String tempPath) throws IOException, SQLException {
+		List<Table> tables = new ParseIntoSOGTables(tempPath, lines, predicatesInOrderOfSeen, temporaryGraphIdMap, namespaces).run();
+		new IntroduceGraphEnum(tempPath, tables, temporaryGraphIdMap).run();
+		return tables;
 	}
 
-	void stepOne(List<String> lines, Connection conn_rw) throws IOException, SQLException {
-		Instant start = Instant.now();
-		logger.info("Starting step 1 parsing files into temporary sorted ones");
-		List<Future<SQLException>> closers = new ArrayList<>();
-		List<Future<?>> toRun = new ArrayList<>();
-		CountDownLatch latch = new CountDownLatch(lines.size());
-		parseFilesIntoPerPredicateType(lines, toRun, latch, conn_rw);
-		writeOutPredicates(closers, conn_rw);
-		tempIriIdMapIntoTable(conn_rw, "graphs", temporaryGraphIdMap);
-		logger.info("step 1 took " + Duration.between(start, Instant.now()));
-		checkpoint(conn_rw);
-		try (java.sql.Statement stat = conn_rw.createStatement()) {
-			stat.execute("CREATE TYPE " + Datatypes.GRAPH_IRIS.label()
-					+ " AS ENUM (SELECT graphs.iri FROM graphs ORDER BY graphs.id)");
-		}
-
-		List<Table> tables = this.tables();
-		for (Table table : tables) {
-			for (PredicateMap pm : table.objects()) {
-				final Iterator<Column> iterator = pm.columns().getColumns().stream()
-						.filter(c -> c.name().endsWith(Columns.GRAPH)).iterator();
-				while (iterator.hasNext()) {
-					Column graphColumn = iterator.next();
-					StringBuilder asCase = new StringBuilder("CASE");
-					for (TempIriId id : temporaryGraphIdMap.iris()) {
-						asCase.append(" WHEN ");
-						asCase.append(graphColumn.name());
-						asCase.append(" = ");
-						asCase.append(id.id());
-						asCase.append(" THEN " + "'");
-						asCase.append(id.stringValue());
-						asCase.append("'");
-					}
-					graphColumn.setDatatype(Datatypes.GRAPH_IRIS);
-					asCase.append(" END");
-					try (java.sql.Statement stat = conn_rw.createStatement()) {
-						final String cast = "ALTER TABLE " + table.name() + " ALTER " + graphColumn.name()
-								+ " TYPE graph_iris USING (" + asCase + ")";
-						logger.info("casting " + cast);
-						stat.execute(cast);
-						if (!conn_rw.getAutoCommit()) {
-							conn_rw.commit();
-						}
-					}
-				}
-			}
-		}
-	}
-
-	void stepTwo(String tempPath) throws SQLException {
-		List<Table> tables = this.tables();
-		try (Connection conn = openDuckDb(tempPath)) {
-			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
-			tables = rdfTypeSplitting.split(conn, tables, namespaces);
-			checkpoint(conn);
-		}
-		for (Table table : tables) {
-			try (Connection conn = openDuckDb(tempPath)) {
-				IntroduceVirtualColumns.optimizeForR2RML(conn, table);
-				checkpoint(conn);
-			}
-		}
-		for (Table table : tables) {
-			try (Connection conn = openDuckDb(tempPath)) {
-				OptimizeForDatatype.optimizeForR2RML(conn, table);
-				checkpoint(conn);
-			}
-		}
-		
-		for (Table table : tables) {
-			try (Connection conn = openDuckDb(tempPath)) {
-				OptimizeForLongestCommonSubstring.optimizeForR2RML(conn, table);
-				checkpoint(conn);
-			}
-		}
-		try (Connection conn = openDuckDb(tempPath)) {
-			tables = new TableMerging().merge(conn, tables);
-			checkpoint(conn);
-		}
+	List<Table> stepTwo(String tempPath, List<Table> tables) throws SQLException {
+		tables = new OptimizeForR2RML(tempPath, tables, namespaces).run();
 		R2RMLFromTables.write(tables, System.out);
+		return tables;
 	}
 
 	void stepThree(String tempPath) throws SQLException, IOException {
-		Set<String> tablesToCopy;
-		try (Connection conn_rw = openDuckDb(tempPath)) {
-			tablesToCopy = findAllPresentTables(conn_rw);
-		}
-		try (Connection conn_rw2 = DriverManager.getConnection("jdbc:duckdb:" + directoryToWriteToo.getAbsolutePath(),
-				new Properties())) {
-			removeAnySystemTables(tablesToCopy, conn_rw2);
-			try (java.sql.Statement statement = conn_rw2.createStatement()) {
-				statement.execute("ATTACH '" + tempPath(directoryToWriteToo) + "' AS source (READ_ONLY)");
-			}
-			for (String tableName : tablesToCopy) {
-				try (java.sql.Statement statement = conn_rw2.createStatement()) {
-					statement.execute("CREATE TABLE " + tableName + " AS SELECT * from source.main." + tableName);
-				}
-			}
-			checkpoint(conn_rw2);
-		}
-		Files.delete(new File(tempPath).toPath());
-	}
-
-	public void removeAnySystemTables(Set<String> tablesToCopy, Connection conn_rw2) throws SQLException {
-		try (java.sql.Statement statement = conn_rw2.createStatement()) {
-			try (ResultSet rs = statement.executeQuery("SELECT table_name FROM information_schema.tables")) {
-				while (rs.next()) {
-					tablesToCopy.remove(rs.getString(1));
-				}
-			}
-		}
-	}
-
-	public Set<String> findAllPresentTables(Connection conn_rw) throws SQLException {
-		Set<String> tablesToCopy = new HashSet<>();
-		try (java.sql.Statement statement = conn_rw.createStatement()) {
-			try (ResultSet rs = statement.executeQuery("SELECT table_name FROM information_schema.tables")) {
-				while (rs.next()) {
-					tablesToCopy.add(rs.getString(1));
-				}
-			}
-		}
-		return tablesToCopy;
-	}
-
-	private void checkpoint(Connection conn_rw) throws SQLException {
-		try (java.sql.Statement s = conn_rw.createStatement()) {
-			final boolean execute = s.execute("checkpoint");
-			logger.info("Checkpoint returned: " + execute);
-		}
-	}
-
-	private void writeOutPredicates(List<Future<SQLException>> closers, Connection conn_rw)
-			throws IOException, SQLException {
-		tempIriIdMapIntoTable(conn_rw, "predicates", predicatesInOrderOfSeen);
-		for (TempIriId predicateI : predicatesInOrderOfSeen.iris()) {
-			closers.add(exec.submit(() -> closeSingle(predicateI)));
-		}
-
-		ExternalProcessHelper.waitForFutures(closers);
-		exec.shutdown();
-	}
-
-	public void tempIriIdMapIntoTable(Connection conn_rw, String tableName, TemporaryIriIdMap m) throws SQLException {
-		try (Connection conn_w_pred = ((DuckDBConnection) conn_rw).duplicate()) {
-			try (java.sql.Statement ct = conn_w_pred.createStatement()) {
-				ct.execute("CREATE OR REPLACE TABLE " + tableName + " (id INT PRIMARY KEY, iri VARCHAR)");
-			}
-
-			for (TempIriId predicateI : m.iris()) {
-				try (PreparedStatement prepareStatement = conn_w_pred
-						.prepareStatement("INSERT INTO " + tableName + " VALUES (?, ?);")) {
-					String predicateS = predicateI.stringValue();
-					prepareStatement.setInt(1, predicateI.id());
-					logger.info("Writing into " + tableName + " id:" + predicateI.id() + " iri:" + predicateS);
-					prepareStatement.setString(2, predicateS);
-					prepareStatement.execute();
-				}
-			}
-		}
-	}
-
-	private SQLException closeSingle(TempIriId predicate) {
-		try {
-			parsePresureLimit.acquireUninterruptibly();
-			predicatesDirectories.get(predicate.id()).close();
-		} catch (SQLException e) {
-			return e;
-		} finally {
-			parsePresureLimit.release();
-		}
-		return null;
-	}
-
-	private LoadIntoTable writeStatement(File directoryToWriteToo, TemporaryIriIdMap predicatesInOrderOfSeen,
-			Map<Integer, PredicateDirectoryWriter> predicateDirectories, Statement next, LoadIntoTable previous,
-			Connection conn_rw) throws IOException, SQLException {
-		PredicateDirectoryWriter predicateDirectoryWriter;
-		if (previous != null && previous.testForAcceptance(next)) {
-			previous.write(next);
-			return previous;
-		} else {
-			TempIriId predicate = predicatesInOrderOfSeen.temporaryIriId(next.getPredicate());
-
-			predicateDirectoryWriter = predicateDirectories.get(predicate.id());
-			if (predicateDirectoryWriter == null) {
-				predicateDirectoryWriter = addNewPredicateWriter(directoryToWriteToo, predicatesInOrderOfSeen,
-						predicateDirectories, predicate, conn_rw);
-			}
-			return predicateDirectoryWriter.write(next);
-		}
-	}
-
-	private PredicateDirectoryWriter addNewPredicateWriter(File directoryToWriteToo,
-			TemporaryIriIdMap predicatesInOrderOfSeen, Map<Integer, PredicateDirectoryWriter> predicateDirectories,
-			TempIriId predicate, Connection conn_rw) throws IOException, SQLException {
-		PredicateDirectoryWriter predicateDirectoryWriter;
-		try {
-			predicateSeenLock.lock();
-
-			int tempPredicateId = predicate.id();
-			if (!predicateDirectories.containsKey(tempPredicateId)) {
-				predicateDirectoryWriter = createPredicateDirectoryWriter(directoryToWriteToo, predicateDirectories,
-						predicate, temporaryGraphIdMap, conn_rw);
-				predicateDirectories.put(tempPredicateId, predicateDirectoryWriter);
-			} else {
-				predicateDirectoryWriter = predicateDirectories.get(predicate.id());
-			}
-
-		} finally {
-			predicateSeenLock.unlock();
-		}
-		return predicateDirectoryWriter;
-	}
-
-	private PredicateDirectoryWriter createPredicateDirectoryWriter(File directoryToWriteToo,
-			Map<Integer, PredicateDirectoryWriter> predicatesInOrderOfSeen, TempIriId predicate,
-			TemporaryIriIdMap temporaryGraphIdMap, Connection conn_rw) throws IOException, SQLException {
-
-		PredicateDirectoryWriter predicateDirectoryWriter = new PredicateDirectoryWriter(conn_rw, temporaryGraphIdMap,
-				predicate, namespaces);
-		return predicateDirectoryWriter;
+		new Vacuum(tempPath, directoryToWriteToo.getAbsolutePath()).run();
 	}
 
 	public enum Kind {
@@ -589,152 +185,5 @@ public class Loader {
 				throw new IllegalStateException();
 			}
 		}
-	}
-
-	static class PredicateDirectoryWriter implements AutoCloseable {
-		private final Map<LoadIntoTable.TargetKey, LoadIntoTable> targets = new ConcurrentHashMap<>();
-
-		public Collection<LoadIntoTable> getTargets() {
-			return targets.values();
-		}
-
-		private final TemporaryIriIdMap tempraphIdMap;
-		private final Lock lock = new ReentrantLock();
-		private final TempIriId predicate;
-		private final Connection conn_rw;
-		private final Map<String, String> namespaces;
-
-		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap, TempIriId predicate,
-				Map<String, String> namespaces) throws IOException, SQLException {
-			this.conn_rw = conn_rw;
-			this.tempraphIdMap = temporaryGraphIdMap;
-			this.predicate = predicate;
-			this.namespaces = namespaces;
-		}
-
-		/**
-		 * Warning accessed from multiple threads.
-		 *
-		 * @param statement to write
-		 * @throws IOException
-		 * @throws SQLException
-		 */
-		private LoadIntoTable write(Statement statement) throws IOException, SQLException {
-			TargetKey key = LoadIntoTable.key(statement);
-			LoadIntoTable findAny = targets.get(key);
-			if (findAny != null) {
-				findAny.write(statement);
-			} else {
-				try {
-					lock.lock();
-					findAny = targets.get(key);
-					if (findAny != null)
-						findAny.write(statement);
-					else {
-						findAny = new LoadIntoTable(statement, conn_rw, tempraphIdMap, predicate, namespaces);
-						targets.put(key, findAny);
-						findAny.write(statement);
-					}
-				} finally {
-					lock.unlock();
-				}
-			}
-			return findAny;
-		}
-
-		@Override
-		public void close() throws SQLException {
-			try {
-				lock.lock();
-				for (LoadIntoTable writer : targets.values()) {
-					writer.close();
-				}
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		public IRI getPredicate() {
-			return predicate;
-		}
-	}
-
-	private class Handler implements RDFHandler {
-		private final Map<String, Long> bnodeMap = new HashMap<>();
-		private final IRI graph;
-		private LoadIntoTable previous = null;
-		private final Connection conn;
-
-		public Handler(IRI graph, Connection conn) {
-			super();
-			this.graph = graph;
-			this.conn = conn;
-		}
-
-		@Override
-		public void startRDF() throws RDFHandlerException {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
-		public void endRDF() throws RDFHandlerException {
-		}
-
-		@Override
-		public void handleNamespace(String prefix, String uri) throws RDFHandlerException {
-			namespaces.putIfAbsent(prefix, uri);
-		}
-
-		@Override
-		public void handleStatement(Statement next) throws RDFHandlerException {
-			if (next.getContext() == null) {
-				next = vf.createStatement(next.getSubject(), next.getPredicate(), next.getObject(), graph);
-			}
-			if (next.getObject() instanceof BNode) {
-				BNode bo = bnodeToReadOnlyBnode((BNode) next.getObject());
-				next = vf.createStatement(next.getSubject(), next.getPredicate(), bo, next.getContext());
-			}
-			if (next.getSubject() instanceof BNode) {
-				BNode bo = bnodeToReadOnlyBnode((BNode) next.getSubject());
-				next = vf.createStatement(bo, next.getPredicate(), next.getObject(), next.getContext());
-			}
-			try {
-				previous = writeStatement(directoryToWriteToo, predicatesInOrderOfSeen, predicatesDirectories, next,
-						previous, conn);
-			} catch (IOException | SQLException e) {
-				logger.error("IO:", e);
-				throw new RDFHandlerException("Failure passing data on", e);
-			}
-
-		}
-
-		private BNode bnodeToReadOnlyBnode(BNode bo) {
-			if (bnodeMap.containsKey(bo.getID())) {
-				bo = new LoaderBlankNode(bnodeMap.get(bo.getID()));
-			} else {
-				long bnodeId = BNODE_ID_NORMALIZER.incrementAndGet();
-				bnodeMap.put(bo.getID(), bnodeId);
-				bo = new LoaderBlankNode(bnodeId);
-			}
-			return bo;
-		}
-
-		@Override
-		public void handleComment(String comment) throws RDFHandlerException {
-			// TODO Auto-generated method stub
-
-		}
-	}
-
-	public List<Table> tables() {
-		List<Table> l = new ArrayList<>();
-		for (var me : predicatesDirectories.entrySet()) {
-			PredicateDirectoryWriter value = me.getValue();
-			for (var t : value.getTargets()) {
-				l.add(t.table());
-			}
-		}
-		return l;
 	}
 }

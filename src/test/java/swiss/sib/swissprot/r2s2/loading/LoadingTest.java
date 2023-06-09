@@ -12,7 +12,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -29,11 +28,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import swiss.sib.swissprot.r2s2.analysis.IntroduceVirtualColumns;
-import swiss.sib.swissprot.r2s2.analysis.OptimizeForDatatype;
-import swiss.sib.swissprot.r2s2.analysis.OptimizeForLongestCommonSubstring;
-import swiss.sib.swissprot.r2s2.analysis.RdfTypeSplitting;
-import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -80,30 +74,18 @@ public class LoadingTest {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
-//		DuckDBDatabaseMetaData db = new DuckDBDatabase("jdbc:duckdb:" + newFolder.getAbsolutePath(), false, p);
+		Loader loader = new Loader(newFolder, 1);
 		
-		Loader loader = Loader.parse(newFolder, List.of(input.getAbsolutePath() + "\thttp://example.org/graph"), 1);
-		
-		List<Table> tables = loader.tables();
+		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
+		List<Table> tables = loader.stepOne(lines, newFolder.getAbsolutePath());
 		validateRdfTypeStatementsLoaded(newFolder, tables);
 		R2RMLFromTables.write(tables, System.out);
-
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath()+".loading-tmp");) {
-			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
-			tables = rdfTypeSplitting.split(conn_rw, tables, Map.of("rdf", RDF.NAMESPACE));
-			for (Table table : tables) {
-				IntroduceVirtualColumns.optimizeForR2RML( conn_rw, table);
-				OptimizeForLongestCommonSubstring.optimizeForR2RML( conn_rw, table);
-				OptimizeForDatatype.optimizeForR2RML( conn_rw, table);
-			}
-			tables = new TableMerging().merge(conn_rw, tables);
-		}
+		tables = loader.stepTwo(newFolder.getAbsolutePath(), tables);
 		R2RMLFromTables.write(tables, System.out);
-//		db.shutdown();
 	}
 
 	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {
-		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath()+".loading-tmp");) {
+		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());) {
 			for (Table t : tables) {
 				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
 					try (java.sql.Statement count = conn_rw.createStatement();
