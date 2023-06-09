@@ -49,8 +49,14 @@ public class IntroduceVirtualColumns {
 								String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
 								log.info("dropping: " + table.name() + "." + column.name());
 								ct2.execute(dropColumn);
-								if(!conn.getAutoCommit()) {
-									conn.commit();
+								commitIfNeed(conn);
+							} catch (SQLException e) {
+								//Last column can not be dropped. So we just delete all values.
+								try (Statement ct3 = conn.createStatement()) {
+									final String emptyTable = "DELETE FROM "+table.name();
+									log.info("emptying: " + table.name() + " " + emptyTable);
+									ct3.execute(emptyTable);
+									commitIfNeed(conn);
 								}
 							}
 						} else {
@@ -59,6 +65,14 @@ public class IntroduceVirtualColumns {
 					}
 				}
 			}
+		}
+	}
+
+
+
+	public static void commitIfNeed(Connection conn) throws SQLException {
+		if(!conn.getAutoCommit()) {
+			conn.commit();
 		}
 	}
 }

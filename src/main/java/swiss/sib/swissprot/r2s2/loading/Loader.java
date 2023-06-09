@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +78,10 @@ import swiss.sib.swissprot.r2s2.analysis.TableMerging;
 import swiss.sib.swissprot.r2s2.loading.LoadIntoTable.TargetKey;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
+import swiss.sib.swissprot.r2s2.sql.Column;
+import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.Datatypes;
+import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class Loader {
@@ -313,9 +318,7 @@ public class Loader {
 
 		if (step == 2 || step == 0) {
 			logger.info("Starting step 2");
-			try (Connection conn_rw = openDuckDb(tempPath)) {
-				stepTwo(conn_rw);
-			}
+			stepTwo(tempPath);
 		}
 
 		if (step == 3 || step == 0) {
@@ -339,33 +342,74 @@ public class Loader {
 		tempIriIdMapIntoTable(conn_rw, "graphs", temporaryGraphIdMap);
 		logger.info("step 1 took " + Duration.between(start, Instant.now()));
 		checkpoint(conn_rw);
+		try (java.sql.Statement stat = conn_rw.createStatement()) {
+			stat.execute("CREATE TYPE " + Datatypes.GRAPH_IRIS.label()
+					+ " AS ENUM (SELECT graphs.iri FROM graphs ORDER BY graphs.id)");
+		}
+
+		List<Table> tables = this.tables();
+		for (Table table : tables) {
+			for (PredicateMap pm : table.objects()) {
+				final Iterator<Column> iterator = pm.columns().getColumns().stream()
+						.filter(c -> c.name().endsWith(Columns.GRAPH)).iterator();
+				while (iterator.hasNext()) {
+					Column graphColumn = iterator.next();
+					StringBuilder asCase = new StringBuilder("CASE");
+					for (TempIriId id : temporaryGraphIdMap.iris()) {
+						asCase.append(" WHEN ");
+						asCase.append(graphColumn.name());
+						asCase.append(" = ");
+						asCase.append(id.id());
+						asCase.append(" THEN " + "'");
+						asCase.append(id.stringValue());
+						asCase.append("'");
+					}
+					graphColumn.setDatatype(Datatypes.GRAPH_IRIS);
+					asCase.append(" END");
+					try (java.sql.Statement stat = conn_rw.createStatement()) {
+						final String cast = "ALTER TABLE " + table.name() + " ALTER " + graphColumn.name()
+								+ " TYPE graph_iris USING (" + asCase + ")";
+						logger.info("casting " + cast);
+						stat.execute(cast);
+						if (!conn_rw.getAutoCommit()) {
+							conn_rw.commit();
+						}
+					}
+				}
+			}
+		}
 	}
 
-	void stepTwo(Connection conn_rw) throws SQLException {
+	void stepTwo(String tempPath) throws SQLException {
 		List<Table> tables = this.tables();
-		RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
-		tables = rdfTypeSplitting.split(conn_rw, tables, namespaces);
-		checkpoint(conn_rw);
-		for (Table table : tables) {
-			IntroduceVirtualColumns.optimizeForR2RML(conn_rw, table);
+		try (Connection conn = openDuckDb(tempPath)) {
+			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
+			tables = rdfTypeSplitting.split(conn, tables, namespaces);
+			checkpoint(conn);
 		}
-		checkpoint(conn_rw);
 		for (Table table : tables) {
-			try (Connection conn = ((DuckDBConnection) conn_rw).duplicate()) {
+			try (Connection conn = openDuckDb(tempPath)) {
+				IntroduceVirtualColumns.optimizeForR2RML(conn, table);
+				checkpoint(conn);
+			}
+		}
+		for (Table table : tables) {
+			try (Connection conn = openDuckDb(tempPath)) {
 				OptimizeForDatatype.optimizeForR2RML(conn, table);
 				checkpoint(conn);
 			}
 		}
-		checkpoint(conn_rw);
+		
 		for (Table table : tables) {
-			try (Connection conn = ((DuckDBConnection) conn_rw).duplicate()) {
+			try (Connection conn = openDuckDb(tempPath)) {
 				OptimizeForLongestCommonSubstring.optimizeForR2RML(conn, table);
 				checkpoint(conn);
 			}
 		}
-		checkpoint(conn_rw);
-		tables = new TableMerging().merge(conn_rw, tables);
-		checkpoint(conn_rw);
+		try (Connection conn = openDuckDb(tempPath)) {
+			tables = new TableMerging().merge(conn, tables);
+			checkpoint(conn);
+		}
 		R2RMLFromTables.write(tables, System.out);
 	}
 

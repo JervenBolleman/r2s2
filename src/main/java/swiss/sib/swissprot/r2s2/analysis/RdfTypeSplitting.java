@@ -100,7 +100,7 @@ public class RdfTypeSplitting {
 		} catch (SQLException e) {
 			// Can happen if the table name is not valid.
 			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new Columns(t.subject().getColumns()),
-					t.subjectKind(), List.of(pm), t.graph());
+					t.subjectKind(), List.of(pm));
 		}
 		newTables.add(newTable);
 		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
@@ -123,15 +123,18 @@ public class RdfTypeSplitting {
 
 	private Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
 		Table newTable = new Table("type_" + tableName, new Columns(t.subject().getColumns()), t.subjectKind(),
-				List.of(pm), t.graph());
+				List.of(pm));
 		newTable.create(conn);
 		return newTable;
 	}
 
 	private String newTableName(List<Column> notVirtual, ResultSet rs, Map<String, String> namespaces)
 			throws SQLException {
+		List<Column> forName = notVirtual.stream()
+				.filter(c -> !c.name().endsWith(Columns.GRAPH))
+				.collect(Collectors.toList());
 		String typeIri = rs.getObject(1).toString();
-		for (int i = 2; i <= notVirtual.size(); i++) {
+		for (int i = 2; i <= forName.size(); i++) {
 			typeIri += rs.getObject(i).toString();
 		}
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {

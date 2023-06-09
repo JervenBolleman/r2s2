@@ -89,7 +89,6 @@ public class LoadingTest {
 		R2RMLFromTables.write(tables, System.out);
 
 		try (Connection conn_rw = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath()+".loading-tmp");) {
-			tables = new TableMerging().merge(conn_rw, tables);
 			RdfTypeSplitting rdfTypeSplitting = new RdfTypeSplitting();
 			tables = rdfTypeSplitting.split(conn_rw, tables, Map.of("rdf", RDF.NAMESPACE));
 			for (Table table : tables) {
@@ -97,6 +96,7 @@ public class LoadingTest {
 				OptimizeForLongestCommonSubstring.optimizeForR2RML( conn_rw, table);
 				OptimizeForDatatype.optimizeForR2RML( conn_rw, table);
 			}
+			tables = new TableMerging().merge(conn_rw, tables);
 		}
 		R2RMLFromTables.write(tables, System.out);
 //		db.shutdown();

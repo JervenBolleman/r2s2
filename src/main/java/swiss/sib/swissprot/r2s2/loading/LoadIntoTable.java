@@ -73,27 +73,28 @@ final class LoadIntoTable implements AutoCloseable {
 		}
 		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_", namespaces,predicate);
 		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_",namespaces, predicate);
-		Column graphColumn = new Column("graph", Datatypes.BIGINT);
+		Column objectGraphColumn = Columns.graphColumn(objectKind, lang, datatype, "object_",namespaces, predicate);
+		objectColumns.getColumns().add(objectGraphColumn);
 		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
-		this.table = makeTable(predicate, subjectColumns, objectColumns, graphColumn, tableName);
+		this.table = makeTable(predicate, subjectColumns, objectColumns, tableName);
 
 		this.appender = conn.createAppender("", table.name());
 	}
 
-	public Table makeTable(TempIriId predicate, Columns subjectColumns, Columns objectColumns, Column graphColumn,
+	public Table makeTable(TempIriId predicate, Columns subjectColumns, Columns objectColumns, 
 			final String tableName) throws SQLException {
 		Table table;
 		try {
 			if (tableName != null) {
 				PredicateMap pm = new PredicateMap(predicate, objectColumns, objectKind, lang, datatype);
-				table = new Table(tableName, subjectColumns, subjectKind, List.of(pm), graphColumn);
+				table = new Table(tableName, subjectColumns, subjectKind, List.of(pm));
 			} else
-				table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
+				table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind,  lang,
 						datatype);
 			table.create(conn);
 		} catch (SQLException e) {
 			// Can happen if the table name is not valid.
-			table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, graphColumn, lang,
+			table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, lang,
 					datatype);
 			table.create(conn);
 		}
@@ -196,8 +197,7 @@ final class LoadIntoTable implements AutoCloseable {
 			lock.lock();
 			appender.beginRow();
 			table.subject().add(subjectS, appender);
-			table.objects().get(0).columns().add(objectS, appender);
-			table.graph().add(tempGraphId, appender);
+			table.objects().get(0).columns().add(objectS, tempGraphId, appender);
 			appender.endRow();
 			if (c % FLUSH_EVERY_X == 0) {
 				appender.flush();

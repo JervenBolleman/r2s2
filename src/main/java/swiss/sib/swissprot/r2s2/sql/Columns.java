@@ -22,8 +22,11 @@ public class Columns {
 	public static final String LANG_VALUE = "_langvalue";
 	public static final String LANG = "_lang";
 	public static final String ID = "_id";
+	public static final String IRI = "_iri";
+	public static final String BNODE = "_bnode";
 	public static final String PARTS = "_parts";
 	public static final String PROTOCOL = "_protocol";
+	public static final String GRAPH = "_graph";
 	public static final String HOST = "_host";
 	private final List<Column> columns;
 
@@ -48,12 +51,35 @@ public class Columns {
 		case LITERAL:
 			if (lang != null) {
 				return new Columns(List.of(new Column(prefix + predicatePart + LANG, Datatypes.TEXT),
-						new Column(prefix + LANG_VALUE, Datatypes.TEXT)));
+						new Column(prefix + predicatePart+LANG_VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
 				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
 				Column datatypeColumn = new Column(prefix + datatypePart + DATATYPE, Datatypes.TEXT);
 				final Column valueColumn = new Column(prefix + datatypePart + LIT_VALUE, Datatypes.TEXT);
 				return new Columns(List.of(datatypeColumn, valueColumn));
+			} else {
+				return null;
+			}
+		case TRIPLE:
+		default:
+			throw new UnsupportedOperationException();
+		}
+	}
+
+	public static Column graphColumn(Kind kind, String lang, IRI datatype, String prefix,
+			Map<String, String> namespaces, IRI predicate) {
+		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
+		switch (kind) {
+		case IRI:
+			return new Column(prefix + predicatePart + IRI + GRAPH, Datatypes.INTEGER);
+		case BNODE:
+			return new Column(prefix + predicatePart + BNODE + GRAPH, Datatypes.INTEGER);
+		case LITERAL:
+			if (lang != null) {
+				return new Column(prefix + predicatePart + LANG + GRAPH, Datatypes.INTEGER);
+			} else if (datatype != null) {
+				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
+				return new Column(prefix + datatypePart + DATATYPE+GRAPH, Datatypes.TEXT);
 			} else {
 				return null;
 			}
@@ -85,7 +111,11 @@ public class Columns {
 			}
 			appender.append(l.stringValue());
 		}
-
+	}
+	
+	public void add(Value v, int tempGraphId, DuckDBAppender appender) throws SQLException {
+		add(v, appender);
+		appender.append(tempGraphId);
 	}
 
 	public List<Column> getColumns() {

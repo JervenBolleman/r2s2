@@ -12,20 +12,14 @@ package swiss.sib.swissprot.r2s2.loading;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.IRI;

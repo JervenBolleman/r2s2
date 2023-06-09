@@ -38,6 +38,8 @@ public class TableMerging {
 				} else {
 					notMerged.add(t);
 				}
+			} else {
+				notMerged.add(t);
 			}
 		}
 		Map<List<Column>, List<Table>> collect = mergeCandidates.stream()
@@ -56,18 +58,11 @@ public class TableMerging {
 					tablesToMergeIter.remove();
 				}
 			} else {
-				notMerged(notMerged, tablesToMerge);
+				notMerged.addAll(tablesToMerge);
 			}
 		}
 		notMerged.addAll(merged);
 		return notMerged;
-	}
-
-	private void notMerged(List<Table> notMerged, List<Table> tablesToMerge) {
-		var tablesToMergeIter = tablesToMerge.iterator();
-		assert tablesToMergeIter.hasNext();
-		notMerged.add(tablesToMergeIter.next());
-		assert !tablesToMergeIter.hasNext();
 	}
 
 	private void merge(Table tableToMergeInto, Table next, Connection conn) throws SQLException {

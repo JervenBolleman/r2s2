@@ -26,18 +26,18 @@ public class Table {
 	private static final Logger log = LoggerFactory.getLogger(Table.class);
 	private final Columns subject;
 	private final List<PredicateMap> objects = new ArrayList<>();
-	private final Column graphColumn;
+
 	private final Kind subjectKind;
 	private final String name;
 	private static final AtomicInteger ID_GEN = new AtomicInteger();
 
-	public Table(IRI predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind, Column graphColumn,
-			String lang, IRI datatype) {
+	public Table(IRI predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind, String lang,
+			IRI datatype) {
 		super();
 		this.subject = subject;
 		this.subjectKind = subjectKind;
 		this.objects.add(new PredicateMap(predicate, object, objectKind, lang, datatype));
-		this.graphColumn = graphColumn;
+
 		this.name = generateName("_pred_" + ID_GEN.incrementAndGet(), subjectKind, objectKind, lang, datatype);
 	}
 
@@ -65,13 +65,12 @@ public class Table {
 		}
 		return name;
 	}
-	
-	public Table(String name, Columns subject, Kind subjectKind, List<PredicateMap> objects, Column graphColumn) {
+
+	public Table(String name, Columns subject, Kind subjectKind, List<PredicateMap> objects) {
 		super();
 		this.subject = subject;
 		this.subjectKind = subjectKind;
 		this.objects.addAll(objects);
-		this.graphColumn = graphColumn;
 		this.name = name;
 	}
 
@@ -91,13 +90,12 @@ public class Table {
 		} else {
 			objectsDefinition = ", " + objectsDefinition;
 		}
-		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + objectsDefinition + ", "
-				+ graphColumn.definition() + ")";
+		String dml = "CREATE OR REPLACE TABLE " + name() + " (" + subject.definition() + objectsDefinition + ")";
 		try (Statement ct = conn.createStatement()) {
 
 			log.warn("Running: " + dml);
 			ct.execute(dml);
-			if(!conn.getAutoCommit()) {
+			if (!conn.getAutoCommit()) {
 				conn.commit();
 			}
 		}
@@ -106,13 +104,7 @@ public class Table {
 
 	public String name() {
 
-		
-		
 		return name;
-	}
-
-	public Column graph() {
-		return graphColumn;
 	}
 
 	public Model generateR2RML() {
@@ -142,10 +134,13 @@ public class Table {
 			StringBuilder template = new StringBuilder();
 
 			for (Column c : p.columns().getColumns()) {
-				if (!c.isVirtual())
+				if (!c.isVirtual()) {
 					allVirtual = false;
-				else
+				} else if (!c.name().endsWith(Columns.GRAPH)) {
 					template.append(((VirtualSingleValueColumn) c).getValue());
+				} else  {
+					addGraphs(model, vf, table, c);
+				}
 			}
 			if (allVirtual) {
 				model.add(vf.createStatement(table, R2RML.clazz, vf.createIRI(template.toString())));
@@ -164,28 +159,53 @@ public class Table {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
 			for (Column column : c.getColumns()) {
-				if (column.name().endsWith(Columns.DATATYPE)) {
-					columnDefinition(model, vf, R2RML.datatype, map, column);
-				} else if (column.name().endsWith(Columns.LANG)) {
-					columnDefinition(model, vf, R2RML.language, map, column);
-				} else if (column.name().endsWith(Columns.LANG_VALUE)) {
-					columnDefinition(model, vf, R2RML.template, map, column);
-				} else if (column.name().endsWith(Columns.LIT_VALUE)) {
-					columnDefinition(model, vf, R2RML.template, map, column);
+				if (!column.name().endsWith(Columns.GRAPH)) {
+					if (column.name().endsWith(Columns.DATATYPE)) {
+						columnDefinition(model, vf, R2RML.datatype, map, column);
+					} else if (column.name().endsWith(Columns.LANG)) {
+						columnDefinition(model, vf, R2RML.language, map, column);
+					} else if (column.name().endsWith(Columns.LANG_VALUE)) {
+						columnDefinition(model, vf, R2RML.template, map, column);
+					} else if (column.name().endsWith(Columns.LIT_VALUE)) {
+						columnDefinition(model, vf, R2RML.template, map, column);
+					}
+				} else {
+					addGraphs(model, vf, map, column);
 				}
 			}
 		} else if (k == Kind.IRI) {
 			StringBuilder template = new StringBuilder();
 			for (Column column : c.getColumns()) {
-				if (column.isVirtual()) {
-					template.append(((VirtualSingleValueColumn) column).getValue());
+				if (!column.name().endsWith(Columns.GRAPH)) {
+					if (column.isVirtual()) {
+						template.append(((VirtualSingleValueColumn) column).getValue());
+					} else {
+						template.append('{').append(column.name()).append('}');
+					}
 				} else {
-					template.append('{').append(column.name()).append('}');
+					addGraphs(model, vf, map, column);
 				}
 			}
 			model.add(map, R2RML.template, vf.createLiteral(template.toString()));
 		} else if (k == Kind.BNODE) {
+			for (Column column : c.getColumns()) {
+				if (!column.name().endsWith(Columns.GRAPH)) {
+					model.add(map, R2RML.template, vf.createLiteral('{'+column.name()+'}'));
+				} else {
+					addGraphs(model, vf, map, column);
+				}
+			}
+		}
+	}
 
+	public void addGraphs(Model model, SimpleValueFactory vf, Resource map, Column column) {
+		if (column.isVirtual()) {
+			final VirtualSingleValueColumn virtualColumn = (VirtualSingleValueColumn) column;
+			model.add(vf.createStatement(map, R2RML.graph, vf.createLiteral(virtualColumn.getValue())));
+		} else { 
+			Resource graphs = vf.createBNode(); 
+			model.add(vf.createStatement(map, R2RML.graphMap, graphs));
+			model.add(vf.createStatement(graphs, R2RML.template, vf.createLiteral('{'+column.name()+'}')));
 		}
 	}
 
@@ -212,7 +232,7 @@ public class Table {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(graphColumn,  objects, name, subject, subjectKind);
+		return Objects.hash(objects, name, subject, subjectKind);
 	}
 
 	@Override
@@ -224,9 +244,7 @@ public class Table {
 		if (getClass() != obj.getClass())
 			return false;
 		Table other = (Table) obj;
-		return Objects.equals(graphColumn, other.graphColumn)
-				&& Objects.equals(objects, other.objects)
-				&& name == other.name && Objects.equals(name, other.name)
+		return Objects.equals(objects, other.objects) && name == other.name && Objects.equals(name, other.name)
 				&& Objects.equals(subject, other.subject) && subjectKind == other.subjectKind;
 	}
 
