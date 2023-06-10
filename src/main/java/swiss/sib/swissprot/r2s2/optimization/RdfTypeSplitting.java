@@ -30,7 +30,7 @@ public class RdfTypeSplitting {
 
 	private static final AtomicInteger TYPE_ID = new AtomicInteger(0);
 
-	public List<Table> split(Connection conn, List<Table> tables, Map<String, String> namespaces) {
+	public static List<Table> split(Connection conn, List<Table> tables, Map<String, String> namespaces) {
 		List<Table> newTables = new ArrayList<>();
 		for (Iterator<Table> iterator = tables.iterator(); iterator.hasNext();) {
 			Table t = iterator.next();
@@ -46,7 +46,7 @@ public class RdfTypeSplitting {
 		return newTables;
 	}
 
-	private List<Table> split(Table t, Iterator<Table> iterator, Connection conn, PredicateMap pm,
+	private static List<Table> split(Table t, Iterator<Table> iterator, Connection conn, PredicateMap pm,
 			Map<String, String> namespaces) {
 		List<Table> newTables = new ArrayList<>();
 		List<Column> notVirtual = new ArrayList<>();
@@ -79,7 +79,7 @@ public class RdfTypeSplitting {
 		return newTables;
 	}
 
-	public void dropOldTable(Table t, Connection conn) {
+	public static void dropOldTable(Table t, Connection conn) {
 		try (Statement update = conn.createStatement()) {
 			String drop = "DROP TABLE " + t.name();
 			log.info("Executing " + drop);
@@ -92,7 +92,7 @@ public class RdfTypeSplitting {
 		}
 	}
 
-	public void createNewTable(Table t, Connection conn, PredicateMap pm, Map<String, String> namespaces,
+	public static void createNewTable(Table t, Connection conn, PredicateMap pm, Map<String, String> namespaces,
 			List<Table> newTables, List<Column> notVirtual, ResultSet rs) throws SQLException {
 		Table newTable;
 		try {
@@ -120,24 +120,23 @@ public class RdfTypeSplitting {
 		}
 	}
 
-	private Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
+	private static Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
 		Table newTable = new Table("type_" + tableName, new Columns(t.subject().getColumns()), t.subjectKind(),
 				List.of(pm));
 		newTable.create(conn);
 		return newTable;
 	}
 
-	private String newTableName(List<Column> notVirtual, ResultSet rs, Map<String, String> namespaces)
+	private static String newTableName(List<Column> notVirtual, ResultSet rs, Map<String, String> namespaces)
 			throws SQLException {
-		List<Column> forName = notVirtual.stream()
-				.filter(c -> !c.name().endsWith(Columns.GRAPH))
+		List<Column> forName = notVirtual.stream().filter(c -> !c.name().endsWith(Columns.GRAPH))
 				.collect(Collectors.toList());
 		String typeIri = rs.getObject(1).toString();
 		for (int i = 2; i <= forName.size(); i++) {
 			typeIri += rs.getObject(i).toString();
 		}
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {
-			if (typeIri.startsWith(en.getValue()) && ! en.getKey().isEmpty()) {
+			if (typeIri.startsWith(en.getValue()) && !en.getKey().isEmpty()) {
 				return en.getKey() + "_" + typeIri.substring(en.getValue().length());
 			}
 		}

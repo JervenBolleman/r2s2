@@ -18,7 +18,7 @@ import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 public class IntroduceVirtualColumns {
 	private static final Logger log = LoggerFactory.getLogger(IntroduceVirtualColumns.class);
 
-	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
+	public static void optimize(Connection conn, Table table) {
 
 		replaceSingleValueColumnsWithVirtual(table, table.subject().getColumns(), conn);
 		for (PredicateMap p : table.objects()) {
@@ -26,10 +26,7 @@ public class IntroduceVirtualColumns {
 		}
 	}
 
-	
-
-	private static void replaceSingleValueColumnsWithVirtual(Table table, List<Column> columns, Connection conn)
-			throws SQLException {
+	private static void replaceSingleValueColumnsWithVirtual(Table table, List<Column> columns, Connection conn) {
 
 		for (int i = 0; i < columns.size(); i++) {
 			Column column = columns.get(i);
@@ -44,32 +41,36 @@ public class IntroduceVirtualColumns {
 
 						String value = executeQuery.getString(1);
 						if (!executeQuery.next()) {
-							log.info(table.name() + '.' + column.name() + " has one value");
-							columns.set(i, new VirtualSingleValueColumn(column.name(), column.datatype(), value));
-							try (Statement ct2 = conn.createStatement()) {
-								String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
-								log.info("dropping: " + table.name() + "." + column.name());
-								ct2.execute(dropColumn);
-								DuckDBUtil.commitIfNeeded(conn);
-							} catch (SQLException e) {
-								//Last column can not be dropped. So we just delete all values.
-								try (Statement ct3 = conn.createStatement()) {
-									final String emptyTable = "DELETE FROM "+table.name();
-									log.info("emptying: " + table.name() + " " + emptyTable);
-									ct3.execute(emptyTable);
-									DuckDBUtil.commitIfNeeded(conn);
-								}
-							}
+							replaceAColumn(table, columns, conn, i, column, value);
 						} else {
 							log.info(table.name() + '.' + column.name() + " has more than one value");
 						}
 					}
+				} catch (SQLException e) {
+					throw new IllegalStateException(e);
 				}
 			}
 		}
 	}
 
-
-
+	public static void replaceAColumn(Table table, List<Column> columns, Connection conn, int i, Column column,
+			String value) throws SQLException {
+		log.info(table.name() + '.' + column.name() + " has one value");
+		columns.set(i, new VirtualSingleValueColumn(column.name(), column.datatype(), value));
+		try (Statement ct2 = conn.createStatement()) {
+			String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
+			log.info("dropping: " + table.name() + "." + column.name());
+			ct2.execute(dropColumn);
+			DuckDBUtil.commitIfNeeded(conn);
+		} catch (SQLException e) {
+			// Last column can not be dropped. So we just delete all values.
+			try (Statement ct3 = conn.createStatement()) {
+				final String emptyTable = "DELETE FROM " + table.name();
+				log.info("emptying: " + table.name() + " " + emptyTable);
+				ct3.execute(emptyTable);
+				DuckDBUtil.commitIfNeeded(conn);
+			}
+		}
+	}
 
 }

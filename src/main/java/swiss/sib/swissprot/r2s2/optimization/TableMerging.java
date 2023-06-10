@@ -21,11 +21,15 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class TableMerging {
 	private static final Logger log = LoggerFactory.getLogger(TableMerging.class);
+	private final Connection conn;
+	private final List<Table> tables;
 
-	public TableMerging() {
+	public TableMerging(Connection conn, List<Table> tables) {
+		this.conn = conn;
+		this.tables = tables;
 	}
 
-	public List<Table> merge(Connection conn, List<Table> tables) throws SQLException {
+	public List<Table> run() throws SQLException {
 		List<Table> mergeCandidates = new ArrayList<>();
 		List<Table> notMerged = new ArrayList<>();
 		for (Iterator<Table> iterator = tables.iterator(); iterator.hasNext();) {

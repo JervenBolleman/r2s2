@@ -20,7 +20,7 @@ import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 public class OptimizeForLongestCommonSubstring {
 	private static Logger log = LoggerFactory.getLogger(OptimizeForLongestCommonSubstring.class);
 
-	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
+	public static void optimize(Connection conn, Table table) {
 		if (table.subjectKind() == Kind.IRI) {
 			replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);
 		}
@@ -30,24 +30,27 @@ public class OptimizeForLongestCommonSubstring {
 		}
 	}
 
-	private static void replaceLongestStartingPrefixWithVirtual(Table table, List<Column> columns, Connection conn)
-			throws SQLException {
+	private static void replaceLongestStartingPrefixWithVirtual(Table table, List<Column> columns, Connection conn) {
 		int max = columns.size();
 		for (int i = 0; i < max; i++) {
 			Column column = columns.get(i);
 			if (column.isPhysical()) {
-				String lcs = findLongestCommonPrefixString(table, conn, column);
-				if (lcs != null) {
-					columns.add(columns.indexOf(column),
-							new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
-					try (Statement ct = conn.createStatement()) {
-						String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
-								+ "," + lcs.length() + ")";
-						log.warn(uc);
-
-						ct.executeUpdate(uc);
-						DuckDBUtil.commitIfNeeded(conn);
+				try {
+					String lcs = findLongestCommonPrefixString(table, conn, column);
+					if (lcs != null) {
+						columns.add(columns.indexOf(column),
+								new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
+						try (Statement ct = conn.createStatement()) {
+							String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
+									+ "," + lcs.length() + ")";
+							log.warn(uc);
+	
+							ct.executeUpdate(uc);
+							DuckDBUtil.commitIfNeeded(conn);
+						}
 					}
+				} catch (SQLException e) {
+					throw new IllegalStateException(e);
 				}
 			}
 		}

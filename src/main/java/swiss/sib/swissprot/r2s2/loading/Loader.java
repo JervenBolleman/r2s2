@@ -10,11 +10,15 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
+import static swiss.sib.swissprot.r2s2.DuckDBUtil.checkpoint;
+import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +35,7 @@ import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
+import swiss.sib.swissprot.r2s2.optimization.TableMerging;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -130,8 +135,12 @@ public class Loader {
 			stepTwo(tempPath, tables);
 		}
 		if (step == 3 || step == 0) {
-			logger.info("Starting step 3, a poor mans vacuum");
-			stepThree(tempPath);
+			logger.info("Starting step 3: merging tables");
+			tables = stepThree(tempPath, tables);
+		}
+		if (step == 4 || step == 0) {
+			logger.info("Starting step 4, a poor mans vacuum");
+			stepFour(tempPath);
 		}
 	}
 
@@ -147,7 +156,15 @@ public class Loader {
 		return tables;
 	}
 
-	void stepThree(String tempPath) throws SQLException, IOException {
+	List<Table> stepThree(String tempPath, List<Table> tables) throws SQLException {
+		try (Connection conn = open(tempPath)) {
+			tables = new TableMerging(conn, tables).run();
+			checkpoint(conn);
+		}
+		return tables;
+	}
+
+	void stepFour(String tempPath) throws SQLException, IOException {
 		new Vacuum(tempPath, directoryToWriteToo.getAbsolutePath()).run();
 	}
 

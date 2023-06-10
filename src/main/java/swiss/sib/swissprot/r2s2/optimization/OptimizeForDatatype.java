@@ -19,7 +19,7 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 public class OptimizeForDatatype {
 	private static final Logger logger = LoggerFactory.getLogger(OptimizeForDatatype.class);
 
-	public static void optimizeForR2RML(Connection conn, Table table) throws SQLException {
+	public static void optimize(Connection conn, Table table) {
 		for (PredicateMap p : table.objects()) {
 			for (Column c : p.columns().getColumns()) {
 				alterForDatatype(conn, table, p, c, XSD.INT, Datatypes.INTEGER, "");
@@ -36,7 +36,7 @@ public class OptimizeForDatatype {
 	}
 
 	public static void alterForDatatype(Connection conn, Table table, PredicateMap p, Column c, final IRI xsd,
-			final Datatypes sql, String cast) throws SQLException {
+			final Datatypes sql, String cast) {
 		if (c.isPhysical() && c.name().endsWith(Columns.LIT_VALUE)) {
 			if (xsd.equals(p.datatype())) {
 				alterTableTo(table, c, sql, conn, cast);
@@ -44,8 +44,7 @@ public class OptimizeForDatatype {
 		}
 	}
 
-	private static void alterTableTo(Table table, Column c, Datatypes dt, Connection conn, String cast)
-			throws SQLException {
+	private static void alterTableTo(Table table, Column c, Datatypes dt, Connection conn, String cast) {
 //		debug(table, c, conn);
 		final String sql = "ALTER TABLE " + table.name() + " ALTER " + c.name() + " TYPE " + dt.label() + cast;
 		try (Statement stat = conn.createStatement()) {
