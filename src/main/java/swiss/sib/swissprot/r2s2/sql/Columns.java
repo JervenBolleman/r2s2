@@ -35,7 +35,7 @@ public class Columns {
 	}
 
 	public String definition() {
-		return columns.stream().filter(c -> c.isPhysical()).map(Column::definition).collect(Collectors.joining(", "));
+		return columns.stream().filter(Column::isPhysical).map(Column::definition).collect(Collectors.joining(", "));
 	}
 
 	public static Columns from(Kind kind, String lang, IRI datatype, String prefix, Map<String, String> namespaces,

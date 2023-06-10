@@ -10,28 +10,18 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
-import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class TemporaryIriIdMap {
-	private static final Logger logger = LoggerFactory.getLogger(TemporaryIriIdMap.class);
 	private final Map<TempIriId, Integer> graphIriOrder = new ConcurrentHashMap<>();
-	private final Map<Integer,TempIriId> iriOrderGraph = new ConcurrentHashMap<>();
 	private final AtomicInteger ids = new AtomicInteger(0);
 	private final Lock lock = new ReentrantLock();
 
@@ -44,56 +34,25 @@ public class TemporaryIriIdMap {
 	}
 
 	public TempIriId temporaryIriId(IRI graphIri) {
-		if (graphIri instanceof IRI) {
-			Integer got = graphIriOrder.get(graphIri);
-			if (got == null) {
-				try {
-					lock.lock();
-					if (!graphIriOrder.containsKey(graphIri)) {
-						TempIriId temp = new TempIriId((IRI) graphIri, ids.getAndIncrement());
-						graphIriOrder.put(temp, temp.id());
-						iriOrderGraph.put(temp.id(), temp);
-						return temp;
-					}
-					got = graphIriOrder.get(graphIri);
-				} finally {
-					lock.unlock();
+		Integer got = graphIriOrder.get(graphIri);
+		if (got == null) {
+			try {
+				lock.lock();
+				if (!graphIriOrder.containsKey(graphIri)) {
+					TempIriId temp = new TempIriId((IRI) graphIri, ids.getAndIncrement());
+					graphIriOrder.put(temp, temp.id());
+					return temp;
 				}
+				got = graphIriOrder.get(graphIri);
+			} finally {
+				lock.unlock();
 			}
-			return new TempIriId((IRI) graphIri, got);
 		}
-		logger.error("recieved graph that is not an IRI" + graphIri);
-		Loader.Failures.GRAPH_ID_NOT_IRI.exit();
-		return new TempIriId(graphIri, (int) Loader.NOT_FOUND);
+		return new TempIriId((IRI) graphIri, got);
 	}
 
 	public Collection<TempIriId> iris() {
 		return graphIriOrder.keySet();
-	}
-
-	public IRI iriFromTempIriId(int id) {
-		return iriOrderGraph.get(Integer.valueOf(id));
-	}
-
-	public Integer parseInt(String s) {
-		return Integer.parseUnsignedInt(s, 16);
-	}
-
-	public static TemporaryIriIdMap fromDisk(File rootDir) throws IOException {
-		TemporaryIriIdMap r = new TemporaryIriIdMap();
-
-		Path path = extracted(rootDir).toPath();
-		if (Files.exists(path)) {
-			try (Stream<String> lines = Files.lines(path)) {
-				lines.map(s -> SimpleValueFactory.getInstance().createIRI(s)).forEach(r::temporaryIriId);
-			}
-		}
-		return r;
-
-	}
-
-	private static File extracted(File rootDir) {
-		return new File(rootDir.getParentFile(), "graphs");
 	}
 	
 	/**
@@ -105,11 +64,13 @@ public class TemporaryIriIdMap {
 		private static final long serialVersionUID = 1L;
 		private final IRI wrapped;
 		private final int id;
+		private final int hashcode;
 
 		public TempIriId(IRI wrapped, int id) {
 			super();
 			this.wrapped = wrapped;
 			this.id = id;
+			this.hashcode = wrapped.hashCode();
 		}
 
 		@Override
@@ -129,7 +90,7 @@ public class TemporaryIriIdMap {
 
 		@Override
 		public int hashCode() {
-			return wrapped.hashCode();
+			return hashcode;
 		}
 
 		@Override
