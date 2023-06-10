@@ -35,7 +35,7 @@ public class Columns {
 	}
 
 	public String definition() {
-		return columns.stream().filter(c -> !c.isVirtual()).map(Column::definition).collect(Collectors.joining(", "));
+		return columns.stream().filter(c -> c.isPhysical()).map(Column::definition).collect(Collectors.joining(", "));
 	}
 
 	public static Columns from(Kind kind, String lang, IRI datatype, String prefix, Map<String, String> namespaces,
@@ -51,7 +51,7 @@ public class Columns {
 		case LITERAL:
 			if (lang != null) {
 				return new Columns(List.of(new Column(prefix + predicatePart + LANG, Datatypes.TEXT),
-						new Column(prefix + predicatePart+LANG_VALUE, Datatypes.TEXT)));
+						new Column(prefix + predicatePart + LANG_VALUE, Datatypes.TEXT)));
 			} else if (datatype != null) {
 				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
 				Column datatypeColumn = new Column(prefix + datatypePart + DATATYPE, Datatypes.TEXT);
@@ -79,7 +79,7 @@ public class Columns {
 				return new Column(prefix + predicatePart + LANG + GRAPH, Datatypes.INTEGER);
 			} else if (datatype != null) {
 				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
-				return new Column(prefix + datatypePart + DATATYPE+GRAPH, Datatypes.TEXT);
+				return new Column(prefix + datatypePart + DATATYPE + GRAPH, Datatypes.TEXT);
 			} else {
 				return null;
 			}
@@ -112,7 +112,7 @@ public class Columns {
 			appender.append(l.stringValue());
 		}
 	}
-	
+
 	public void add(Value v, int tempGraphId, DuckDBAppender appender) throws SQLException {
 		add(v, appender);
 		appender.append(tempGraphId);

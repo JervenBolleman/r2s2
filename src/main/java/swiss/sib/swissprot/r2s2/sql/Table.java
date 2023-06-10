@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
@@ -83,7 +85,10 @@ public class Table {
 	}
 
 	public void create(Connection conn) throws SQLException {
-		String objectsDefinition = objects.stream().map((p) -> p.columns().definition())
+		final Stream<String> map = objects.stream()
+				.map((p) -> p.columns().definition());
+		String objectsDefinition = map
+				.filter(Predicate.not(String::isBlank))
 				.collect(Collectors.joining(","));
 		if (objectsDefinition == null || objectsDefinition.isEmpty()) {
 			objectsDefinition = "";

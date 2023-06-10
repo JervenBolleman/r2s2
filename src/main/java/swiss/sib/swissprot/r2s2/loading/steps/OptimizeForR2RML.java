@@ -13,12 +13,14 @@ import swiss.sib.swissprot.r2s2.optimization.IntroduceVirtualColumns;
 import swiss.sib.swissprot.r2s2.optimization.OptimizeForDatatype;
 import swiss.sib.swissprot.r2s2.optimization.OptimizeForLongestCommonSubstring;
 import swiss.sib.swissprot.r2s2.optimization.RdfTypeSplitting;
+import swiss.sib.swissprot.r2s2.optimization.ReintroduceRdfSetSemantics;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public record OptimizeForR2RML(String dbPath, List<Table> tables, Map<String, String> namespaces) {
 
 	private static final List<BiConsumer<Connection, Table>> OPTIMIZERS = List.of(IntroduceVirtualColumns::optimize,
-			OptimizeForDatatype::optimize, OptimizeForLongestCommonSubstring::optimize);
+			OptimizeForDatatype::optimize, OptimizeForLongestCommonSubstring::optimize,
+			ReintroduceRdfSetSemantics::optimize);
 	public List<Table> run() throws SQLException {
 		List<Table> tables = tables();
 		try (Connection conn = open(dbPath)) {
