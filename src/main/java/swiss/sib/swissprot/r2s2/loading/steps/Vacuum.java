@@ -21,15 +21,17 @@ public record Vacuum(String temp, String destination) {
 		}
 		try (Connection conn_rw2 = open(destination)) {
 			removeAnySystemTables(tablesToCopy, conn_rw2);
-			try (Statement statement = conn_rw2.createStatement()) {
-				statement.execute("ATTACH '" + temp + "' AS source (READ_ONLY)");
-			}
-			for (String tableName : tablesToCopy) {
+		}
+		for (String tableName : tablesToCopy) {
+			try (Connection conn_rw2 = open(destination)) {
+				try (Statement statement = conn_rw2.createStatement()) {
+					statement.execute("ATTACH '" + temp + "' AS source (READ_ONLY)");
+				}
 				try (Statement statement = conn_rw2.createStatement()) {
 					statement.execute("CREATE TABLE " + tableName + " AS SELECT * from source.main." + tableName);
 				}
+				checkpoint(conn_rw2);
 			}
-			checkpoint(conn_rw2);
 		}
 		Files.delete(new File(temp).toPath());
 	}
