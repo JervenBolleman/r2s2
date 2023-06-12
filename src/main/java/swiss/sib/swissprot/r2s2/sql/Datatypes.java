@@ -14,4 +14,13 @@ public enum Datatypes {
 	public String label() {
 		return sql;
 	}
+
+	public static Datatypes fromLabel(String label) {
+		for (Datatypes dt : values()) {
+			if (dt.label().equals(label)) {
+				return dt;
+			}
+		}
+		return null;
+	}
 }

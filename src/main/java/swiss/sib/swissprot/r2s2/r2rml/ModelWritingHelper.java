@@ -1,10 +1,8 @@
 package swiss.sib.swissprot.r2s2.r2rml;
 
-import java.io.BufferedWriter;
 import java.io.Writer;
 
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.vocabulary.R2RML;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;

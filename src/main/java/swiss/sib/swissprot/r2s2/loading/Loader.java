@@ -127,7 +127,7 @@ public class Loader {
 		final String fn = new File(dt).getName();
 		return new File(p, fn + "-description.ttl");
 	}
-	
+
 	public static File r2rmlPath(String dt) {
 		final File p = new File(dt).getParentFile();
 		final String fn = new File(dt).getName();
@@ -136,6 +136,9 @@ public class Loader {
 
 	public void parse(List<String> lines, String tempPath) throws IOException, SQLException {
 		List<Table> tables = null;
+		if (step > 1) {
+			tables = TableDescriptionAsRdf.read(descriptionPath(tempPath));;
+		}
 		if (step == 1 || step == 0) {
 			logger.info("Starting step 1");
 			tables = stepOne(lines, tempPath);
@@ -213,6 +216,21 @@ public class Loader {
 				return "bnode";
 			case LITERAL:
 				return "literal";
+			default:
+				throw new IllegalStateException();
+			}
+		}
+
+		public static Kind fromLabel(String label) {
+			switch (label) {
+			case "triple":
+				return TRIPLE;
+			case "iri":
+				return IRI;
+			case "bnode":
+				return BNODE;
+			case "literal":
+				return LITERAL;
 			default:
 				throw new IllegalStateException();
 			}
