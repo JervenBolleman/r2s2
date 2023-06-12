@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -75,13 +76,19 @@ public class LoadingTest {
 			e1.printStackTrace();
 		}
 		Loader loader = new Loader(newFolder, 1);
-		
+
 		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
 		List<Table> tables = loader.stepOne(lines, newFolder.getAbsolutePath());
 		validateRdfTypeStatementsLoaded(newFolder, tables);
-		R2RMLFromTables.write(tables, System.out);
+		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			R2RMLFromTables.write(tables, out);
+			System.out.write(out.toByteArray());
+		}
 		tables = loader.stepTwo(newFolder.getAbsolutePath(), tables);
-		R2RMLFromTables.write(tables, System.out);
+		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			R2RMLFromTables.write(tables, out);
+			System.out.write(out.toByteArray());
+		}
 	}
 
 	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {
@@ -96,7 +103,8 @@ public class LoadingTest {
 					}
 
 					try (java.sql.Statement count = conn_rw.createStatement();
-							var rs = count.executeQuery("SELECT COUNT(DISTINCT object_rdf_type_parts) FROM " + t.name())) {
+							var rs = count
+									.executeQuery("SELECT COUNT(DISTINCT object_rdf_type_parts) FROM " + t.name())) {
 						assertTrue(rs.next());
 						assertEquals(2, rs.getInt(1));
 						assertFalse(rs.next());

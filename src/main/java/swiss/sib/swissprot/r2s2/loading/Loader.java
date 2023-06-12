@@ -37,6 +37,7 @@ import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
 import swiss.sib.swissprot.r2s2.optimization.TableMerging;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
+import swiss.sib.swissprot.r2s2.r2rml.TableDescriptionAsRdf;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class Loader {
@@ -45,14 +46,12 @@ public class Loader {
 	private static final Logger logger = LoggerFactory.getLogger(Loader.class);
 	static final char fieldSep = '\t';
 
-
 	public static final long NOT_FOUND = -404;
 	private final File directoryToWriteToo;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen = new TemporaryIriIdMap();
 
 	private final Map<String, String> namespaces = new ConcurrentHashMap<>();
 	private volatile TemporaryIriIdMap temporaryGraphIdMap = new TemporaryIriIdMap();
-
 
 	private final int step;
 
@@ -89,10 +88,9 @@ public class Loader {
 		namespaces.putIfAbsent(RDF.PREFIX, RDF.NAMESPACE);
 		namespaces.putIfAbsent(RDFS.PREFIX, RDFS.NAMESPACE);
 		namespaces.putIfAbsent(XSD.PREFIX, XSD.NAMESPACE);
-		
+
 	}
 
-	
 	public static void main(String args[]) throws IOException, SQLException {
 		String fileDescribedToLoad = args[0];
 		File directoryToWriteToo = new File(args[1]);
@@ -111,7 +109,7 @@ public class Loader {
 	}
 
 	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
-		
+
 		Loader wo = new Loader(directoryToWriteToo, step);
 		final String tempPath = tempPath(directoryToWriteToo);
 
@@ -124,35 +122,52 @@ public class Loader {
 		return directoryToWriteToo.getAbsolutePath() + ".loading-tmp";
 	}
 
+	public static File descriptionPath(String dt) {
+		final File p = new File(dt).getParentFile();
+		final String fn = new File(dt).getName();
+		return new File(p, fn + "-description.ttl");
+	}
+	
+	public static File r2rmlPath(String dt) {
+		final File p = new File(dt).getParentFile();
+		final String fn = new File(dt).getName();
+		return new File(p, fn + "-r2rml.ttl");
+	}
+
 	public void parse(List<String> lines, String tempPath) throws IOException, SQLException {
 		List<Table> tables = null;
 		if (step == 1 || step == 0) {
 			logger.info("Starting step 1");
 			tables = stepOne(lines, tempPath);
+			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
 		if (step == 2 || step == 0) {
 			logger.info("Starting step 2");
-			stepTwo(tempPath, tables);
+			tables = stepTwo(tempPath, tables);
+			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
 		if (step == 3 || step == 0) {
 			logger.info("Starting step 3: merging tables");
 			tables = stepThree(tempPath, tables);
+			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
 		if (step == 4 || step == 0) {
 			logger.info("Starting step 4, a poor mans vacuum");
 			stepFour(tempPath);
+			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
 	}
 
 	List<Table> stepOne(List<String> lines, String tempPath) throws IOException, SQLException {
-		List<Table> tables = new ParseIntoSOGTables(tempPath, lines, predicatesInOrderOfSeen, temporaryGraphIdMap, namespaces).run();
+		List<Table> tables = new ParseIntoSOGTables(tempPath, lines, predicatesInOrderOfSeen, temporaryGraphIdMap,
+				namespaces).run();
 		new IntroduceGraphEnum(tempPath, tables, temporaryGraphIdMap).run();
 		return tables;
 	}
 
-	List<Table> stepTwo(String tempPath, List<Table> tables) throws SQLException {
+	List<Table> stepTwo(String tempPath, List<Table> tables) throws SQLException, IOException {
 		tables = new OptimizeForR2RML(tempPath, tables, namespaces).run();
-		R2RMLFromTables.write(tables, System.out);
+		R2RMLFromTables.write(tables, r2rmlPath(tempPath));
 		return tables;
 	}
 
