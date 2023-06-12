@@ -32,6 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
+import swiss.sib.swissprot.r2s2.loading.steps.IntroduceHostEnums;
+import swiss.sib.swissprot.r2s2.loading.steps.IntroduceProtocolEnums;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
@@ -155,10 +157,24 @@ public class Loader {
 			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
 		if (step == 4 || step == 0) {
-			logger.info("Starting step 4, a poor mans vacuum");
-			stepFour(tempPath);
+			logger.info("Starting step 4, which is step 2 again");
+			tables = stepTwo(tempPath, tables);
 			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
 		}
+		if (step == 5 || step == 0) {
+			logger.info("Starting step 5: introducing enum types");
+			stepFive(tempPath, tables);
+		}
+		if (step == 6 || step == 0) {
+			logger.info("Starting step 6, a poor mans vacuum");
+			stepSix(tempPath);
+			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
+		}
+	}
+
+	public void stepFive(String tempPath, List<Table> tables) throws SQLException {
+		new IntroduceProtocolEnums(tempPath, tables, temporaryGraphIdMap).run();
+		new IntroduceHostEnums(tempPath, tables, temporaryGraphIdMap).run();
 	}
 
 	List<Table> stepOne(List<String> lines, String tempPath) throws IOException, SQLException {
@@ -182,7 +198,7 @@ public class Loader {
 		return tables;
 	}
 
-	void stepFour(String tempPath) throws SQLException, IOException {
+	void stepSix(String tempPath) throws SQLException, IOException {
 		new Vacuum(tempPath, directoryToWriteToo.getAbsolutePath()).run();
 	}
 
