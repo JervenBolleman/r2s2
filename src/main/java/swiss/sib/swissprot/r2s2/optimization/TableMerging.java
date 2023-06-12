@@ -107,7 +107,9 @@ public class TableMerging {
 				log.info(delete);
 				log.info(insert);
 				stat.execute(update);
+				DuckDBUtil.commitIfNeeded(conn);
 				stat.execute(delete);
+				DuckDBUtil.commitIfNeeded(conn);
 				stat.execute(insert);
 				DuckDBUtil.commitIfNeeded(conn);
 				tableToMergeInto.objects().add(pm);

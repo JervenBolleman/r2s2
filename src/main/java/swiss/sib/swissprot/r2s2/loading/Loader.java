@@ -35,7 +35,7 @@ import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
-import swiss.sib.swissprot.r2s2.optimization.TableMerging;
+import swiss.sib.swissprot.r2s2.optimization.TableMergingConcurence;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.r2rml.TableDescriptionAsRdf;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -176,7 +176,7 @@ public class Loader {
 
 	List<Table> stepThree(String tempPath, List<Table> tables) throws SQLException {
 		try (Connection conn = open(tempPath)) {
-			tables = new TableMerging(conn, tables).run();
+			tables = new TableMergingConcurence(conn, tables).run();
 			checkpoint(conn);
 		}
 		return tables;

@@ -41,7 +41,7 @@ public class OptimizeForLongestCommonSubstring {
 						columns.add(columns.indexOf(column),
 								new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
 						try (Statement ct = conn.createStatement()) {
-							String uc = "UPDATE " + table.name() + " SET " + column.name() + "= SUBSTRING(" + column.name()
+							String uc = "UPDATE " + table.name() + " SET " + column.name() + " = SUBSTRING(" + column.name()
 									+ "," + lcs.length() + ")";
 							log.warn(uc);
 	
