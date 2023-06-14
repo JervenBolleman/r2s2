@@ -18,6 +18,7 @@ import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -25,7 +26,7 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceProtocolEnums.class);
 
-	public void run() throws SQLException {
+	public void run() {
 		try (Connection conn_rw = open(temp)) {
 			Set<String> protocols = new HashSet<>();
 			String findDistinctProtocols = tables.stream()
@@ -33,14 +34,14 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 					.collect(Collectors.joining(" UNION ", "(", ")"));
 
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE protocol_part AS ENUM (SELECT DISTINCT * FROM (" + findDistinctProtocols
-						+ "))";
+				final String sql = "CREATE TYPE " + Datatypes.PROTOCOL.label() + " AS ENUM (SELECT DISTINCT * FROM ("
+						+ findDistinctProtocols + "))";
 				logger.info("creating protocol part: " + sql);
 				stat.execute(sql);
-			} catch (SQLException e) {
-				throw new IllegalStateException(e);
+				tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
 			}
-			tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
 	}
 
@@ -57,11 +58,12 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 		while (iterator.hasNext()) {
 			Column protocolColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name()
-						+ " TYPE protocol_part";
+				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name() + " TYPE"
+						+ Datatypes.PROTOCOL.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
 				DuckDBUtil.commitIfNeeded(conn_rw);
+				protocolColumn.setDatatype(Datatypes.PROTOCOL);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}

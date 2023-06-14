@@ -51,6 +51,7 @@ public class OptimizeForDatatype {
 			logger.info("RUNNING " + sql);
 			stat.execute(sql);
 			DuckDBUtil.commitIfNeeded(conn);
+			c.setDatatype(dt);
 		} catch (SQLException e) {
 			logger.info(
 					"FAILED to convert column:" + table.name() + '.' + c.name() + " to a " + c + " using cast:" + cast);

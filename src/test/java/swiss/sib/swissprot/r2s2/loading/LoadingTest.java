@@ -44,23 +44,28 @@ public class LoadingTest {
 		File input = writeTestData(newFolder);
 
 		assertDuckDbAvailable();
-		Loader loader = new Loader(newFolder, 1);
-
 		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
-		List<Table> tables = loader.stepOne(lines, newFolder.getAbsolutePath());
-		validateRdfTypeStatementsLoaded(newFolder, tables);
-		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-			R2RMLFromTables.write(tables, out);
-			System.out.write(out.toByteArray());
-		}
-		tables = loader.stepTwo(newFolder.getAbsolutePath(), tables);
-		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-			R2RMLFromTables.write(tables, out);
-			System.out.write(out.toByteArray());
-		}
-		try (Connection conn = open(newFolder)) {
-			tables = new TableMergingConcurence(conn, tables).run();
+		Loader loader = new Loader(newFolder, 1, lines);
+		loader.runStep(0);
+		loader.runStep(1);
+		validateRdfTypeStatementsLoaded(loader);
+		loader.runStep(2);
+		writeR2RML(loader.tables());
+		loader.runStep(3);
+		writeR2RML(loader.tables());
+		loader.runStep(4);
+		writeR2RML(loader.tables());
+		List<Table> tables = new TableMergingConcurence(loader.tempPath(), loader.tables()).run();
+		try (Connection conn = open(loader.tempPath())) {
+			writeR2RML(tables);
 			validateRdfMerged(conn);
+		}
+	}
+
+	public void writeR2RML(List<Table> tables) throws IOException {
+		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			R2RMLFromTables.write(tables, out);
+			System.out.write(out.toByteArray());
 		}
 	}
 
@@ -71,31 +76,49 @@ public class LoadingTest {
 			assertEquals(2, rs.getInt(1));
 			assertFalse(rs.next());
 		}
-
-		try (java.sql.Statement count = conn.createStatement();
-				var rs = count.executeQuery(
-						"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='type_rdf_Alt'")) {
-			assertTrue(rs.next());
-			assertEquals(rs.getString(1), "subject_rdf_type_parts");
-			assertTrue(rs.next());
-			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
-			assertFalse(rs.next());
-		}
-
-		try (java.sql.Statement count = conn.createStatement();
-				var rs = count.executeQuery("SELECT object_rdfs_label_langvalue FROM type_rdf_Alt")) {
-			assertTrue(rs.next());
-			assertTrue(rs.next());
-			assertTrue(rs.next());
-			assertFalse(rs.next());
-		}
-
 		try (java.sql.Statement count = conn.createStatement();
 				var rs = count.executeQuery("SELECT COUNT(object_rdfs_label_langvalue) FROM type_rdf_Alt")) {
+			assertTrue(rs.next());
+			assertEquals(1, rs.getInt(1));
+			assertFalse(rs.next());
+		}
+		
+		try (java.sql.Statement count = conn.createStatement();
+				var rs = count.executeQuery("SELECT COUNT(object_rdfs_labelxsd_boolean_litvalue) FROM type_rdf_Bag")) {
 			assertTrue(rs.next());
 			assertEquals(2, rs.getInt(1));
 			assertFalse(rs.next());
 		}
+		try (java.sql.Statement count = conn.createStatement();
+				var rs = count.executeQuery(
+						"SELECT column_name FROM information_schema.columns WHERE table_name='type_rdf_Alt' ORDER BY column_name")) {
+			assertTrue(rs.next());
+			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
+			assertTrue(rs.next());
+			assertEquals(rs.getString(1), "subject_rdf_type_parts");
+			assertFalse(rs.next());
+		}
+		
+		try (java.sql.Statement count = conn.createStatement();
+				var rs = count.executeQuery(
+						"SELECT column_name FROM information_schema.columns WHERE table_name='type_rdf_Bag' ORDER BY column_name")) {
+			assertTrue(rs.next());
+			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
+			assertTrue(rs.next());
+			assertEquals(rs.getString(1), "object_rdfs_labelxsd_boolean_litvalue");
+			assertTrue(rs.next());
+			assertEquals(rs.getString(1), "subject_rdf_type_parts");
+			assertFalse(rs.next());
+		}
+
+		try (java.sql.Statement count = conn.createStatement();
+				var rs = count.executeQuery("SELECT object_rdfs_labelxsd_boolean_litvalue FROM type_rdf_Bag")) {
+			assertTrue(rs.next());
+			assertTrue(rs.next());
+			assertFalse(rs.next());
+		}
+
+	
 
 	}
 
@@ -104,8 +127,10 @@ public class LoadingTest {
 		SimpleValueFactory vf = SimpleValueFactory.getInstance();
 
 		List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
+				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), 
+				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
+				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), 
+				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
 				vf.createStatement(RDF.LIST, RDFS.LABEL, vf.createLiteral(false)),
@@ -140,9 +165,9 @@ public class LoadingTest {
 		}
 	}
 
-	private void validateRdfTypeStatementsLoaded(File newFolder, List<Table> tables) throws SQLException {
-		try (Connection conn_rw = open(newFolder);) {
-			for (Table t : tables) {
+	private void validateRdfTypeStatementsLoaded(Loader loader) throws SQLException {
+		try (Connection conn_rw = open(loader.tempPath())) {
+			for (Table t : loader.tables()) {
 				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
 					try (java.sql.Statement count = conn_rw.createStatement();
 							var rs = count.executeQuery("SELECT COUNT(*) FROM " + t.name())) {
@@ -163,7 +188,7 @@ public class LoadingTest {
 		}
 	}
 
-	public Connection open(File newFolder) throws SQLException {
-		return DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());
+	public Connection open(String newFolder) throws SQLException {
+		return DriverManager.getConnection("jdbc:duckdb:" + newFolder);
 	}
 }

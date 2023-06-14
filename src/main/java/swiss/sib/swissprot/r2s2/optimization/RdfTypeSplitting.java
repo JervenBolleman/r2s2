@@ -97,11 +97,11 @@ public class RdfTypeSplitting {
 		Table newTable;
 		try {
 			String tableName = newTableName(notVirtual, rs, namespaces);
-			newTable = makeNewTable(t, conn, pm, tableName);
+			newTable = makeNewTable(t, conn, pm.copy(), tableName);
 		} catch (SQLException e) {
 			// Can happen if the table name is not valid.
 			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new Columns(t.subject().getColumns()),
-					t.subjectKind(), List.of(pm));
+					t.subjectKind(), List.of(pm.copy()));
 		}
 		newTables.add(newTable);
 		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";

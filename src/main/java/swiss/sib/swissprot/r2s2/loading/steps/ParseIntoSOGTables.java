@@ -98,18 +98,20 @@ public class ParseIntoSOGTables {
 
 	private static final Logger logger = LoggerFactory.getLogger(ParseIntoSOGTables.class);
 
-	public List<Table> run() throws SQLException, IOException {
+	public List<Table> run() throws IOException {
 		try (Connection conn_rw = open(tempPath)) {
 			Instant start = Instant.now();
-			logger.info("Starting step 1 parsing files into temporary sorted ones");
+			logger.info("Starting step parsing files into SOG tables, named by predicate");
 			List<Future<SQLException>> closers = new ArrayList<>();
 			List<Future<?>> toRun = new ArrayList<>();
 			CountDownLatch latch = new CountDownLatch(lines.size());
 			parseFilesIntoPerPredicateType(lines, toRun, latch, conn_rw);
 			writeOutPredicates(closers, conn_rw);
 			tempIriIdMapIntoTable(conn_rw, "graphs", temporaryGraphIdMap);
-			logger.info("step 1 took " + Duration.between(start, Instant.now()));
+			logger.info("Parsing files into SOG tables took " + Duration.between(start, Instant.now()));
 			checkpoint(conn_rw);
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
 
 		List<Table> l = new ArrayList<>();

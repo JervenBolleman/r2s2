@@ -23,7 +23,7 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceGraphEnum.class);
-	public void run() throws SQLException {
+	public void run() {
 		try (Connection conn_rw = open(temp)) {
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				stat.execute("CREATE TYPE " + Datatypes.GRAPH_IRIS.label()
@@ -41,17 +41,20 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 					}
 				}
 			}
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
 	}
 
-	public void alterTable(Connection conn_rw, Table table, Column graphColumn, StringBuilder asCase)
-			throws SQLException {
+	public void alterTable(Connection conn_rw, Table table, Column graphColumn, StringBuilder asCase) {
 		try (Statement stat = conn_rw.createStatement()) {
 			final String cast = "ALTER TABLE " + table.name() + " ALTER " + graphColumn.name()
 					+ " TYPE graph_iris USING (" + asCase + ")";
 			logger.info("casting " + cast);
 			stat.execute(cast);
 			DuckDBUtil.commitIfNeeded(conn_rw);
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
 	}
 

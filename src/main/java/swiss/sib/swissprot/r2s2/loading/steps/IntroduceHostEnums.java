@@ -18,6 +18,7 @@ import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -25,26 +26,25 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceHostEnums.class);
 
-	public void run() throws SQLException {
+	public void run() {
 		try (Connection conn_rw = open(temp)) {
 			Set<String> protocols = new HashSet<>();
-			String findDistinctProtocols = tables.stream()
-					.flatMap(table -> collectProtocolParts(conn_rw, protocols, table))
+			String findDistinctHosts = tables.stream().flatMap(table -> collectHostParts(conn_rw, protocols, table))
 					.collect(Collectors.joining(" UNION ", "(", ")"));
 
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE host_part AS ENUM (SELECT DISTINCT * FROM (" + findDistinctProtocols
-						+ "))";
+				final String sql = "CREATE TYPE " + Datatypes.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
+						+ findDistinctHosts + "))";
 				logger.info("creating protocol part: " + sql);
 				stat.execute(sql);
-			} catch (SQLException e) {
-				throw new IllegalStateException(e);
+				tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
 			}
-			tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
 	}
 
-	public Stream<String> collectProtocolParts(Connection conn_rw, Set<String> protocols, Table table) {
+	public Stream<String> collectHostParts(Connection conn_rw, Set<String> protocols, Table table) {
 		return table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns).flatMap(List::stream)
 				.filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.HOST))
 				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name());
@@ -55,13 +55,14 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.HOST))
 				.iterator();
 		while (iterator.hasNext()) {
-			Column protocolColumn = iterator.next();
+			Column hostColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name()
-						+ " TYPE host_part";
+				final String cast = "ALTER TABLE " + table.name() + " ALTER " + hostColumn.name() + " TYPE "
+						+ Datatypes.HOST.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
 				DuckDBUtil.commitIfNeeded(conn_rw);
+				hostColumn.setDatatype(Datatypes.HOST);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}

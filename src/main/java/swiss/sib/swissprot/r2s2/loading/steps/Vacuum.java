@@ -14,26 +14,34 @@ import java.util.HashSet;
 import java.util.Set;
 
 public record Vacuum(String temp, String destination) {
-	public void run() throws SQLException, IOException {
+	public void run() {
 		Set<String> tablesToCopy;
-		try (Connection conn_rw = open(temp)) {
-			tablesToCopy = findAllPresentTables(conn_rw);
-		}
-		try (Connection conn_rw2 = open(destination)) {
-			removeAnySystemTables(tablesToCopy, conn_rw2);
-		}
-		for (String tableName : tablesToCopy) {
-			try (Connection conn_rw2 = open(destination)) {
-				try (Statement statement = conn_rw2.createStatement()) {
-					statement.execute("ATTACH '" + temp + "' AS source (READ_ONLY)");
-				}
-				try (Statement statement = conn_rw2.createStatement()) {
-					statement.execute("CREATE TABLE " + tableName + " AS SELECT * from source.main." + tableName);
-				}
-				checkpoint(conn_rw2);
+		try {
+			try (Connection conn_rw = open(temp)) {
+				tablesToCopy = findAllPresentTables(conn_rw);
 			}
+			try (Connection conn_rw2 = open(destination)) {
+				removeAnySystemTables(tablesToCopy, conn_rw2);
+			}
+			for (String tableName : tablesToCopy) {
+				try (Connection conn_rw2 = open(destination)) {
+					try (Statement statement = conn_rw2.createStatement()) {
+						statement.execute("ATTACH '" + temp + "' AS source (READ_ONLY)");
+					}
+					try (Statement statement = conn_rw2.createStatement()) {
+						statement.execute("CREATE TABLE " + tableName + " AS SELECT * from source.main." + tableName);
+					}
+					checkpoint(conn_rw2);
+				}
+			}
+		} catch (SQLException e) {
+			throw new IllegalStateException(e);
 		}
-		Files.delete(new File(temp).toPath());
+		try {
+			Files.delete(new File(temp).toPath());
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	private void removeAnySystemTables(Set<String> tablesToCopy, Connection conn_rw2) throws SQLException {

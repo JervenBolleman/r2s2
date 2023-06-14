@@ -16,4 +16,9 @@ public class VirtualSingleValueColumn extends Column {
 	public boolean isVirtual() {
 		return true;
 	}
+
+	@Override
+	public Column copy() {
+		return new VirtualSingleValueColumn(name(), datatype(), value);
+	}
 }

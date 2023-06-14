@@ -59,4 +59,8 @@ public class Column {
 	public void setDatatype(Datatypes datatype) {
 		this.datatype = datatype;
 	}
+	
+	public Column copy() {
+		return new Column(name, datatype);
+	}
 }

@@ -10,19 +10,18 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.checkpoint;
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -49,13 +48,15 @@ public class Loader {
 	static final char fieldSep = '\t';
 
 	public static final long NOT_FOUND = -404;
-	private final File directoryToWriteToo;
+	private final File duckDbFile;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen = new TemporaryIriIdMap();
 
 	private final Map<String, String> namespaces = new ConcurrentHashMap<>();
 	private volatile TemporaryIriIdMap temporaryGraphIdMap = new TemporaryIriIdMap();
 
 	private final int step;
+	private List<Table> tables = null;
+	private List<String> lines;
 
 	/**
 	 * Error exit codes.
@@ -75,14 +76,12 @@ public class Loader {
 		}
 	}
 
-	public Loader(File directoryToWriteToo) throws IOException, SQLException {
-		this(directoryToWriteToo, 0);
-	}
 
-	public Loader(File directoryToWriteToo, int step) throws IOException, SQLException {
+	public Loader(File directoryToWriteToo, int step, List<String> lines) throws IOException, SQLException {
 		super();
-		this.directoryToWriteToo = directoryToWriteToo;
+		this.duckDbFile = directoryToWriteToo;
 		this.step = step;
+		this.lines = lines;
 		if (!directoryToWriteToo.exists()) {
 			directoryToWriteToo.getParentFile().mkdirs();
 		}
@@ -112,103 +111,87 @@ public class Loader {
 
 	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
 
-		Loader wo = new Loader(directoryToWriteToo, step);
-		final String tempPath = tempPath(directoryToWriteToo);
-
-		wo.parse(lines, tempPath);
+		Loader wo = new Loader(directoryToWriteToo, step, lines);
+		wo.parse(lines);
 
 		return wo;
 	}
 
-	public static String tempPath(File directoryToWriteToo) {
-		return directoryToWriteToo.getAbsolutePath() + ".loading-tmp";
+	public String tempPath() {
+		return duckDbFile.getAbsolutePath() + ".loading-tmp";
 	}
 
-	public static File descriptionPath(String dt) {
-		final File p = new File(dt).getParentFile();
-		final String fn = new File(dt).getName();
+	public File descriptionPath() {
+		final File p = duckDbFile.getParentFile();
+		final String fn = duckDbFile.getName();
 		return new File(p, fn + "-description.ttl");
 	}
 
-	public static File r2rmlPath(String dt) {
-		final File p = new File(dt).getParentFile();
-		final String fn = new File(dt).getName();
+	public File r2rmlPath() {
+		final File p = duckDbFile.getParentFile();
+		final String fn = duckDbFile.getName();
 		return new File(p, fn + "-r2rml.ttl");
 	}
 
-	public void parse(List<String> lines, String tempPath) throws IOException, SQLException {
-		List<Table> tables = null;
-		if (step > 1) {
-			tables = TableDescriptionAsRdf.read(descriptionPath(tempPath));;
+	private static final List<Consumer<Loader>> STEPS = List.of(
+			Loader::parseOrReloadState,
+			l -> new IntroduceGraphEnum(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
+			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), 
+			Loader::writeR2RML,
+			l -> l.tables = new TableMergingConcurence(l.tempPath(), l.tables).run(), 
+			Loader::writeR2RML,
+			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), 
+			Loader::writeR2RML,
+			l -> new IntroduceProtocolEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
+			l -> new IntroduceHostEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
+			l -> new Vacuum(l.tempPath(), l.duckDbFile.getAbsolutePath()).run());
+
+	public static void parseOrReloadState(Loader l) {
+		try {
+		if (l.descriptionPath().exists()) {			
+			l.tables = TableDescriptionAsRdf.read(l.descriptionPath());
+		} else {
+			l.tables = new ParseIntoSOGTables(l.tempPath(), l.lines, l.predicatesInOrderOfSeen, l.temporaryGraphIdMap, l.namespaces)
+					.run();				
 		}
-		if (step == 1 || step == 0) {
-			logger.info("Starting step 1");
-			tables = stepOne(lines, tempPath);
-			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
-		}
-		if (step == 2 || step == 0) {
-			logger.info("Starting step 2");
-			tables = stepTwo(tempPath, tables);
-			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
-		}
-		if (step == 3 || step == 0) {
-			logger.info("Starting step 3: merging tables");
-			tables = stepThree(tempPath, tables);
-			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
-		}
-		if (step == 4 || step == 0) {
-			logger.info("Starting step 4, which is step 2 again");
-			tables = stepTwo(tempPath, tables);
-			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
-		}
-		if (step == 5 || step == 0) {
-			logger.info("Starting step 5: introducing enum types");
-			stepFive(tempPath, tables);
-		}
-		if (step == 6 || step == 0) {
-			logger.info("Starting step 6, a poor mans vacuum");
-			stepSix(tempPath);
-			TableDescriptionAsRdf.write(tables, descriptionPath(tempPath));
+		} catch (IOException e) {
+			
 		}
 	}
 
-	public void stepFive(String tempPath, List<Table> tables) throws SQLException {
-		new IntroduceProtocolEnums(tempPath, tables, temporaryGraphIdMap).run();
-		new IntroduceHostEnums(tempPath, tables, temporaryGraphIdMap).run();
-	}
-
-	List<Table> stepOne(List<String> lines, String tempPath) throws IOException, SQLException {
-		List<Table> tables = new ParseIntoSOGTables(tempPath, lines, predicatesInOrderOfSeen, temporaryGraphIdMap,
-				namespaces).run();
-		new IntroduceGraphEnum(tempPath, tables, temporaryGraphIdMap).run();
-		return tables;
-	}
-
-	List<Table> stepTwo(String tempPath, List<Table> tables) throws SQLException, IOException {
-		tables = new OptimizeForR2RML(tempPath, tables, namespaces).run();
-		R2RMLFromTables.write(tables, r2rmlPath(tempPath));
-		return tables;
-	}
-
-	List<Table> stepThree(String tempPath, List<Table> tables) throws SQLException {
-		try (Connection conn = open(tempPath)) {
-			tables = new TableMergingConcurence(conn, tables).run();
-			checkpoint(conn);
+	public static void writeR2RML(Loader l) {
+		try {
+			R2RMLFromTables.write(l.tables, l.r2rmlPath());
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
 		}
-		return tables;
 	}
 
-	void stepSix(String tempPath) throws SQLException, IOException {
-		new Vacuum(tempPath, directoryToWriteToo.getAbsolutePath()).run();
+	public void parse(List<String> lines) throws IOException, SQLException {
+		if (step == 0) {
+			logger.info("Starting all steps ");
+			Instant start = Instant.now();
+			for (int i = 0; i < STEPS.size(); i++) {
+				runStep(i);
+			}
+			logger.info("Finished all steps in " + Duration.between(start, Instant.now()));
+		} else {
+			runStep(step);
+		}
+	}
+
+	public void runStep(int i) throws IOException {
+		logger.info("Starting step " + (i));
+		Instant start = Instant.now();
+		STEPS.get(i).accept(this);
+		logger.info("Finished step " + (i) + " in " + Duration.between(start, Instant.now()));
+		TableDescriptionAsRdf.write(tables, descriptionPath());
 	}
 
 	public enum Kind {
-		BNODE(0), IRI(1), LITERAL(2), TRIPLE(3);
+		BNODE(), IRI(), LITERAL(), TRIPLE();
 
-		private final int sortOrder;
-
-		Kind(int i) {
-			this.sortOrder = i;
+		Kind() {
 		}
 
 		public static Kind of(Value val) {
@@ -251,5 +234,9 @@ public class Loader {
 				throw new IllegalStateException();
 			}
 		}
+	}
+
+	public List<Table> tables() {
+		return tables;
 	}
 }

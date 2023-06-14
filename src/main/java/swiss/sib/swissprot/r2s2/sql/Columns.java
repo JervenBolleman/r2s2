@@ -146,4 +146,9 @@ public class Columns {
 		Columns other = (Columns) obj;
 		return Objects.equals(columns, other.columns);
 	}
+	
+	public Columns copy() {
+		
+		return new Columns(columns.stream().map(Column::copy).collect(Collectors.toList()));
+	}
 }
