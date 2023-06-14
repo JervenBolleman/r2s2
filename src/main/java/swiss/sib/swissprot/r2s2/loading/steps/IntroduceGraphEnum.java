@@ -16,8 +16,8 @@ import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
@@ -26,7 +26,7 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 	public void run() {
 		try (Connection conn_rw = open(temp)) {
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				stat.execute("CREATE TYPE " + Datatypes.GRAPH_IRIS.label()
+				stat.execute("CREATE TYPE " + SqlDatatype.GRAPH_IRIS.label()
 						+ " AS ENUM (SELECT graphs.iri FROM graphs ORDER BY graphs.id)");
 			}
 
@@ -69,7 +69,7 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 			asCase.append(id.stringValue());
 			asCase.append("'");
 		}
-		graphColumn.setDatatype(Datatypes.GRAPH_IRIS);
+		graphColumn.setDatatype(SqlDatatype.GRAPH_IRIS);
 		asCase.append(" END");
 		return asCase;
 	}

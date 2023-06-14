@@ -43,19 +43,19 @@ public class Columns {
 		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
 		switch (kind) {
 		case IRI:
-			return new Columns(List.of(new Column(prefix + predicatePart + PROTOCOL, Datatypes.TEXT),
-					new Column(prefix + predicatePart + HOST, Datatypes.TEXT),
-					new Column(prefix + predicatePart + PARTS, Datatypes.TEXT)));
+			return new Columns(List.of(new Column(prefix + predicatePart + PROTOCOL, SqlDatatype.TEXT),
+					new Column(prefix + predicatePart + HOST, SqlDatatype.TEXT),
+					new Column(prefix + predicatePart + PARTS, SqlDatatype.TEXT)));
 		case BNODE:
-			return new Columns(List.of(new Column(prefix + predicatePart + ID, Datatypes.BIGINT)));
+			return new Columns(List.of(new Column(prefix + predicatePart + ID, SqlDatatype.BIGINT)));
 		case LITERAL:
 			if (lang != null) {
-				return new Columns(List.of(new Column(prefix + predicatePart + LANG, Datatypes.TEXT),
-						new Column(prefix + predicatePart + LANG_VALUE, Datatypes.TEXT)));
+				return new Columns(List.of(new Column(prefix + predicatePart + LANG, SqlDatatype.TEXT),
+						new Column(prefix + predicatePart + LANG_VALUE, SqlDatatype.TEXT)));
 			} else if (datatype != null) {
 				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
-				Column datatypeColumn = new Column(prefix + datatypePart + DATATYPE, Datatypes.TEXT);
-				final Column valueColumn = new Column(prefix + datatypePart + LIT_VALUE, Datatypes.TEXT);
+				Column datatypeColumn = new Column(prefix + datatypePart + DATATYPE, SqlDatatype.TEXT);
+				final Column valueColumn = new Column(prefix + datatypePart + LIT_VALUE, SqlDatatype.TEXT);
 				return new Columns(List.of(datatypeColumn, valueColumn));
 			} else {
 				return null;
@@ -71,15 +71,15 @@ public class Columns {
 		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
 		switch (kind) {
 		case IRI:
-			return new Column(prefix + predicatePart + IRI + GRAPH, Datatypes.INTEGER);
+			return new Column(prefix + predicatePart + IRI + GRAPH, SqlDatatype.INTEGER);
 		case BNODE:
-			return new Column(prefix + predicatePart + BNODE + GRAPH, Datatypes.INTEGER);
+			return new Column(prefix + predicatePart + BNODE + GRAPH, SqlDatatype.INTEGER);
 		case LITERAL:
 			if (lang != null) {
-				return new Column(prefix + predicatePart + LANG + GRAPH, Datatypes.INTEGER);
+				return new Column(prefix + predicatePart + LANG + GRAPH, SqlDatatype.INTEGER);
 			} else if (datatype != null) {
 				final String datatypePart = predicatePart + Naming.iriToSqlNamePart(namespaces, datatype);
-				return new Column(prefix + datatypePart + DATATYPE + GRAPH, Datatypes.TEXT);
+				return new Column(prefix + datatypePart + DATATYPE + GRAPH, SqlDatatype.TEXT);
 			} else {
 				return null;
 			}

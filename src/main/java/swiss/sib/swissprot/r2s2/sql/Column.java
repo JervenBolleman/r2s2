@@ -7,10 +7,10 @@ import org.duckdb.DuckDBAppender;
 
 public class Column {
 	private final String name;
-	private Datatypes datatype;
+	private SqlDatatype datatype;
 	
 	
-	public Column(String name, Datatypes datatype) {
+	public Column(String name, SqlDatatype datatype) {
 		this.name = name;
 		this.datatype = datatype;
 	}
@@ -27,7 +27,7 @@ public class Column {
 		return name;
 	}
 
-	public Datatypes datatype() {
+	public SqlDatatype sqlDatatype() {
 		return datatype;
 	}
 	
@@ -56,7 +56,7 @@ public class Column {
 		return datatype == other.datatype && Objects.equals(name, other.name);
 	}
 
-	public void setDatatype(Datatypes datatype) {
+	public void setDatatype(SqlDatatype datatype) {
 		this.datatype = datatype;
 	}
 	

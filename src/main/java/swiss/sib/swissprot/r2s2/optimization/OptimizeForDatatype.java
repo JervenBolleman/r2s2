@@ -12,8 +12,8 @@ import org.slf4j.LoggerFactory;
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class OptimizeForDatatype {
@@ -22,29 +22,29 @@ public class OptimizeForDatatype {
 	public static void optimize(Connection conn, Table table) {
 		for (PredicateMap p : table.objects()) {
 			for (Column c : p.columns().getColumns()) {
-				alterForDatatype(conn, table, p, c, XSD.INT, Datatypes.INTEGER, "");
-				alterForDatatype(conn, table, p, c, XSD.INTEGER, Datatypes.NUMERIC, "");
-				alterForDatatype(conn, table, p, c, XSD.LONG, Datatypes.BIGINT, "");
-				alterForDatatype(conn, table, p, c, XSD.BOOLEAN, Datatypes.BOOLEAN,
+				alterForDatatype(conn, table, p, c, XSD.INT, SqlDatatype.INTEGER, "");
+				alterForDatatype(conn, table, p, c, XSD.INTEGER, SqlDatatype.NUMERIC, "");
+				alterForDatatype(conn, table, p, c, XSD.LONG, SqlDatatype.BIGINT, "");
+				alterForDatatype(conn, table, p, c, XSD.BOOLEAN, SqlDatatype.BOOLEAN,
 						" USING (CASE WHEN " + c.name() + "='true' THEN true ELSE false END)");
-				alterForDatatype(conn, table, p, c, XSD.DOUBLE, Datatypes.DOUBLE, "");
-				alterForDatatype(conn, table, p, c, XSD.FLOAT, Datatypes.FLOAT, "");
-				alterForDatatype(conn, table, p, c, XSD.DATE, Datatypes.DATE, "");
-				alterForDatatype(conn, table, p, c, XSD.DECIMAL, Datatypes.NUMERIC, "");
+				alterForDatatype(conn, table, p, c, XSD.DOUBLE, SqlDatatype.DOUBLE, "");
+				alterForDatatype(conn, table, p, c, XSD.FLOAT, SqlDatatype.FLOAT, "");
+				alterForDatatype(conn, table, p, c, XSD.DATE, SqlDatatype.DATE, "");
+				alterForDatatype(conn, table, p, c, XSD.DECIMAL, SqlDatatype.NUMERIC, "");
 			}
 		}
 	}
 
 	public static void alterForDatatype(Connection conn, Table table, PredicateMap p, Column c, final IRI xsd,
-			final Datatypes sql, String cast) {
+			final SqlDatatype sql, String cast) {
 		if (c.isPhysical() && c.name().endsWith(Columns.LIT_VALUE)) {
-			if (xsd.equals(p.datatype())) {
+			if (xsd.equals(p.datatype()) && c.sqlDatatype() != sql) {
 				alterTableTo(table, c, sql, conn, cast);
 			}
 		}
 	}
 
-	private static void alterTableTo(Table table, Column c, Datatypes dt, Connection conn, String cast) {
+	private static void alterTableTo(Table table, Column c, SqlDatatype dt, Connection conn, String cast) {
 //		debug(table, c, conn);
 		final String sql = "ALTER TABLE " + table.name() + " ALTER " + c.name() + " TYPE " + dt.label() + cast;
 		try (Statement stat = conn.createStatement()) {

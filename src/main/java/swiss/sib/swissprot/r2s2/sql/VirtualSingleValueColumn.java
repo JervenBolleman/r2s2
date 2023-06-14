@@ -4,7 +4,7 @@ public class VirtualSingleValueColumn extends Column {
 
 	private final String value;
 
-	public VirtualSingleValueColumn(String name, Datatypes datatype, String value) {
+	public VirtualSingleValueColumn(String name, SqlDatatype datatype, String value) {
 		super(name, datatype);
 		this.value = value;
 	}
@@ -19,6 +19,6 @@ public class VirtualSingleValueColumn extends Column {
 
 	@Override
 	public Column copy() {
-		return new VirtualSingleValueColumn(name(), datatype(), value);
+		return new VirtualSingleValueColumn(name(), sqlDatatype(), value);
 	}
 }

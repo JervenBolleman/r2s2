@@ -12,8 +12,8 @@ import org.slf4j.LoggerFactory;
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 
@@ -39,7 +39,7 @@ public class OptimizeForLongestCommonSubstring {
 					String lcs = findLongestCommonPrefixString(table, conn, column);
 					if (lcs != null) {
 						columns.add(columns.indexOf(column),
-								new VirtualSingleValueColumn(column.name() + "_lcs", column.datatype(), lcs));
+								new VirtualSingleValueColumn(column.name() + "_lcs", column.sqlDatatype(), lcs));
 						try (Statement ct = conn.createStatement()) {
 							String uc = "UPDATE " + table.name() + " SET " + column.name() + " = SUBSTRING(" + column.name()
 									+ "," + lcs.length() + ")";
@@ -58,7 +58,7 @@ public class OptimizeForLongestCommonSubstring {
 
 	private static String findLongestCommonPrefixString(Table table, Connection conn, Column column)
 			throws SQLException {
-		if (!column.isVirtual() && Datatypes.TEXT == column.datatype()) {
+		if (!column.isVirtual() && SqlDatatype.TEXT == column.sqlDatatype()) {
 			try (Statement ct = conn.createStatement()) {
 				String dc = "SELECT " + column.name() + " FROM " + table.name() + "";
 				log.info("Running " + dc);

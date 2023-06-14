@@ -18,8 +18,8 @@ import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
@@ -33,7 +33,7 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 					.collect(Collectors.joining(" UNION ", "(", ")"));
 
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE " + Datatypes.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
+				final String sql = "CREATE TYPE " + SqlDatatype.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
 						+ findDistinctHosts + "))";
 				logger.info("creating protocol part: " + sql);
 				stat.execute(sql);
@@ -58,11 +58,11 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 			Column hostColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				final String cast = "ALTER TABLE " + table.name() + " ALTER " + hostColumn.name() + " TYPE "
-						+ Datatypes.HOST.label();
+						+ SqlDatatype.HOST.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
 				DuckDBUtil.commitIfNeeded(conn_rw);
-				hostColumn.setDatatype(Datatypes.HOST);
+				hostColumn.setDatatype(SqlDatatype.HOST);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}

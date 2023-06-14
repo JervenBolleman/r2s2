@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.r2rml.TableDescriptionAsRdf;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 
@@ -50,7 +50,7 @@ public class TableDescriptionTest {
 		final Columns zeroObjectColumns = Columns.from(Kind.IRI, null, null, "object_", Map.of(), zeroIri);
 		final Columns oneSubjectColumns = Columns.from(Kind.IRI, null, null, "subject_", Map.of(), oneIri);
 		final Columns oneObjectColumns = new Columns(
-				List.of(new VirtualSingleValueColumn("t", Datatypes.TEXT, oneIri.stringValue())));
+				List.of(new VirtualSingleValueColumn("t", SqlDatatype.TEXT, oneIri.stringValue())));
 		var zero = new Table(zeroIri, zeroSubjectColumns, Kind.IRI, zeroObjectColumns, Kind.IRI, null, null);
 		var one = new Table(oneIri, oneSubjectColumns, Kind.IRI, oneObjectColumns, Kind.IRI, null, null);
 		final Model model = TableDescriptionAsRdf.model(List.of(zero, one));

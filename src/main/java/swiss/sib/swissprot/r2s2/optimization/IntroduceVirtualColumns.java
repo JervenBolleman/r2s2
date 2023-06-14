@@ -56,7 +56,7 @@ public class IntroduceVirtualColumns {
 	public static void replaceAColumn(Table table, List<Column> columns, Connection conn, int i, Column column,
 			String value) throws SQLException {
 		log.info(table.name() + '.' + column.name() + " has one value");
-		columns.set(i, new VirtualSingleValueColumn(column.name(), column.datatype(), value));
+		columns.set(i, new VirtualSingleValueColumn(column.name(), column.sqlDatatype(), value));
 		try (Statement ct2 = conn.createStatement()) {
 			String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
 			log.info("dropping: " + table.name() + "." + column.name());

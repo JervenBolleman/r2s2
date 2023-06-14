@@ -26,8 +26,8 @@ import org.eclipse.rdf4j.rio.Rio;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 
@@ -83,7 +83,7 @@ public class TableDescriptionAsRdf {
 			model.add(vf.createStatement(subjectColumn, RDF.VALUE, vf.createLiteral(vc.value())));
 		}
 		model.add(vf.createStatement(subjectColumn, RDFS.LABEL, vf.createLiteral(c.name())));
-		model.add(vf.createStatement(subjectColumn, TableAsRdf.datatype, vf.createLiteral(c.datatype().label())));
+		model.add(vf.createStatement(subjectColumn, TableAsRdf.datatype, vf.createLiteral(c.sqlDatatype().label())));
 	}
 
 	public static void write(List<Table> tables, File descriptionPath) throws IOException {
@@ -169,7 +169,7 @@ public class TableDescriptionAsRdf {
 			Resource s = (Resource) columnS.getObject();
 			boolean isPhysical = false;
 			String columnName = null;
-			Datatypes datatype = null;
+			SqlDatatype datatype = null;
 			for (Statement columnType : model.getStatements(s, RDF.TYPE, null)) {
 				isPhysical = TableAsRdf.physicalColumn.equals(columnType.getObject());
 			}
@@ -178,7 +178,7 @@ public class TableDescriptionAsRdf {
 				columnName = columnTypeS.getObject().stringValue();
 			}
 			for (Statement columnTypeS : model.getStatements(s, TableAsRdf.datatype, null)) {
-				datatype = Datatypes.fromLabel(columnTypeS.getObject().stringValue());
+				datatype = SqlDatatype.fromLabel(columnTypeS.getObject().stringValue());
 			}
 			if (isPhysical) {
 				columns.add(new Column(columnName, datatype));

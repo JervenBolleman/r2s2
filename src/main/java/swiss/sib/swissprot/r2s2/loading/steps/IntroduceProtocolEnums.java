@@ -18,8 +18,8 @@ import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.Columns;
-import swiss.sib.swissprot.r2s2.sql.Datatypes;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
+import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
@@ -34,7 +34,7 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 					.collect(Collectors.joining(" UNION ", "(", ")"));
 
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE " + Datatypes.PROTOCOL.label() + " AS ENUM (SELECT DISTINCT * FROM ("
+				final String sql = "CREATE TYPE " + SqlDatatype.PROTOCOL.label() + " AS ENUM (SELECT DISTINCT * FROM ("
 						+ findDistinctProtocols + "))";
 				logger.info("creating protocol part: " + sql);
 				stat.execute(sql);
@@ -59,11 +59,11 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 			Column protocolColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name() + " TYPE"
-						+ Datatypes.PROTOCOL.label();
+						+ SqlDatatype.PROTOCOL.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
 				DuckDBUtil.commitIfNeeded(conn_rw);
-				protocolColumn.setDatatype(Datatypes.PROTOCOL);
+				protocolColumn.setDatatype(SqlDatatype.PROTOCOL);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}
