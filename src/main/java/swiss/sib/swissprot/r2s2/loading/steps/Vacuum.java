@@ -13,16 +13,23 @@ import java.sql.Statement;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public record Vacuum(String temp, String destination) {
+	private static final Logger logger = LoggerFactory.getLogger(Vacuum.class);
 	public void run() {
 		Set<String> tablesToCopy;
 		try {
+			logger.info("finding tables that need to be in final copy");
 			try (Connection conn_rw = open(temp)) {
+				
 				tablesToCopy = findAllPresentTables(conn_rw);
 			}
 			try (Connection conn_rw2 = open(destination)) {
 				removeAnySystemTables(tablesToCopy, conn_rw2);
 			}
+			logger.info("running poor mans vacuum");
 			for (String tableName : tablesToCopy) {
 				try (Connection conn_rw2 = open(destination)) {
 					try (Statement statement = conn_rw2.createStatement()) {
@@ -38,6 +45,7 @@ public record Vacuum(String temp, String destination) {
 			throw new IllegalStateException(e);
 		}
 		try {
+			logger.info("deleting temporary datbase");
 			Files.delete(new File(temp).toPath());
 		} catch (IOException e) {
 			throw new RuntimeException(e);

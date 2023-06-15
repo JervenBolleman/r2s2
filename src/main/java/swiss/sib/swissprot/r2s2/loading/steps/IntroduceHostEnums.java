@@ -4,7 +4,6 @@ import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -28,29 +27,32 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 
 	public void run() {
 		try (Connection conn_rw = open(temp)) {
-			Set<String> protocols = new HashSet<>();
-			String findDistinctHosts = tables.stream().flatMap(table -> collectHostParts(conn_rw, protocols, table))
-					.collect(Collectors.joining(" UNION ", "(", ")"));
 
-			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE " + SqlDatatype.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
-						+ findDistinctHosts + "))";
-				logger.info("creating protocol part: " + sql);
-				stat.execute(sql);
-				tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+			Set<String> hosts = tables.stream().flatMap(table -> collectHostParts(conn_rw, table))
+					.collect(Collectors.toSet());
+			if (!hosts.isEmpty()) {
+				String findDistinctHosts = hosts.stream().collect(Collectors.joining(" UNION ", "(", ")"));
+
+				try (java.sql.Statement stat = conn_rw.createStatement()) {
+					final String sql = "CREATE TYPE " + SqlDatatype.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
+							+ findDistinctHosts + "))";
+					logger.info("creating protocol part: " + sql);
+					stat.execute(sql);
+					tables.stream().forEach(table -> adaptHostParts(conn_rw, table));
+				}
 			}
 		} catch (SQLException e) {
 			throw new IllegalStateException(e);
 		}
 	}
 
-	public Stream<String> collectHostParts(Connection conn_rw, Set<String> protocols, Table table) {
+	public Stream<String> collectHostParts(Connection conn_rw, Table table) {
 		return table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns).flatMap(List::stream)
 				.filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.HOST))
-				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name());
+				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name() + " WHERE "+c.name()+ " IS NOT NULL");
 	}
 
-	public void adaptProtocolParts(Connection conn_rw, Table table) {
+	public void adaptHostParts(Connection conn_rw, Table table) {
 		final Iterator<Column> iterator = table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns)
 				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.HOST))
 				.iterator();

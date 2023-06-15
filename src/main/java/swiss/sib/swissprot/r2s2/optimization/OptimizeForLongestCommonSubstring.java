@@ -41,10 +41,10 @@ public class OptimizeForLongestCommonSubstring {
 						columns.add(columns.indexOf(column),
 								new VirtualSingleValueColumn(column.name() + "_lcs", column.sqlDatatype(), lcs));
 						try (Statement ct = conn.createStatement()) {
-							String uc = "UPDATE " + table.name() + " SET " + column.name() + " = SUBSTRING(" + column.name()
-									+ "," + lcs.length() + ")";
+							String uc = "UPDATE " + table.name() + " SET " + column.name() + " = SUBSTRING("
+									+ column.name() + "," + (lcs.length() + 1) + ")";
 							log.warn(uc);
-	
+
 							ct.executeUpdate(uc);
 							DuckDBUtil.commitIfNeeded(conn);
 						}
@@ -60,7 +60,8 @@ public class OptimizeForLongestCommonSubstring {
 			throws SQLException {
 		if (!column.isVirtual() && SqlDatatype.TEXT == column.sqlDatatype()) {
 			try (Statement ct = conn.createStatement()) {
-				String dc = "SELECT " + column.name() + " FROM " + table.name() + "";
+				String dc = "SELECT " + column.name() + " FROM " + table.name() + " WHERE " + column.name()
+						+ " NOT NULL";
 				log.info("Running " + dc);
 				try (ResultSet executeQuery = ct.executeQuery(dc)) {
 					boolean first = executeQuery.next();

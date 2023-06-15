@@ -25,9 +25,13 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceGraphEnum.class);
 	public void run() {
 		try (Connection conn_rw = open(temp)) {
+
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				stat.execute("CREATE TYPE " + SqlDatatype.GRAPH_IRIS.label()
 						+ " AS ENUM (SELECT graphs.iri FROM graphs ORDER BY graphs.id)");
+			} catch (SQLException e) {
+				logger.info("graphs enum already exists");
+				return;
 			}
 
 			for (Table table : tables) {

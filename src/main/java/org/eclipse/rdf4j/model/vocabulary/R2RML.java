@@ -66,6 +66,8 @@ public class R2RML {
 	public static final IRI IRI;
 	public static final IRI BlankNode;
 	public static final IRI Literal;
+	public static final IRI TriplesMap;
+
 	static {
 		child = Vocabularies.createIRI(R2RML.NAMESPACE, "child");
 		clazz = Vocabularies.createIRI(R2RML.NAMESPACE, "class");
@@ -97,5 +99,6 @@ public class R2RML {
 		IRI = Vocabularies.createIRI(R2RML.NAMESPACE, "IRI");
 		BlankNode = Vocabularies.createIRI(R2RML.NAMESPACE, "BlankNode");
 		Literal = Vocabularies.createIRI(R2RML.NAMESPACE, "Literal");
+		TriplesMap = Vocabularies.createIRI(R2RML.NAMESPACE, "TriplesMap");
 	}
 }

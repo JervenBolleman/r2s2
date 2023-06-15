@@ -7,10 +7,12 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.function.Function;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.R2RML;
@@ -24,39 +26,41 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
 
 public class R2RMLFromTables {
+	private static SimpleValueFactory vf = SimpleValueFactory.getInstance();
+
 	private static Model model(List<Table> tables) {
 		Model model = new LinkedHashModel();
+		Resource tripleMap = vf.createBNode();
+
 		for (var t : tables) {
-			model.addAll(generateR2RML(t));
+			model.addAll(generateR2RML(t, tripleMap));
 		}
 		return model;
 	}
 
 	public static void write(List<Table> tables, File descriptionPath) throws IOException {
-		
+
 		final Model model = model(tables);
-		try (BufferedWriter out= Files.newBufferedWriter(descriptionPath.toPath())){
-			ModelWritingHelper.writeModel(model, out);
-		}
-	}
-	
-	public static void write(List<Table> tables, OutputStream os) throws IOException {
-		
-		final Model model = model(tables);
-		try (BufferedWriter out= new BufferedWriter(new OutputStreamWriter(os))){
+		try (BufferedWriter out = Files.newBufferedWriter(descriptionPath.toPath())) {
 			ModelWritingHelper.writeModel(model, out);
 		}
 	}
 
-	public static Model generateR2RML(Table t) {
+	public static void write(List<Table> tables, OutputStream os) throws IOException {
+		final Model model = model(tables);
+		try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(os))) {
+			ModelWritingHelper.writeModel(model, out);
+		}
+	}
+
+	public static Model generateR2RML(Table t, Resource tripleMap) {
 		Model model = new LinkedHashModel();
-		SimpleValueFactory vf = SimpleValueFactory.getInstance();
 		Resource table = vf.createBNode();// "table_" + name());
 		Resource tablename = vf.createBNode();// "tablename_" + name());
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
-
+		model.add(vf.createStatement(table, RDF.TYPE, R2RML.TriplesMap));
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
-		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(t.name())));
+		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral("main."+t.name())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
 
 		createTemplate(model, vf, subjectMap, t.subjectKind(), "subject", t.subject());
@@ -88,7 +92,7 @@ public class R2RMLFromTables {
 				return;
 			}
 		}
-		model.add(vf.createStatement(table, R2RML.predicateMap, predicateMap));
+		model.add(vf.createStatement(table, R2RML.predicateObjectMap, predicateMap));
 		model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
 		model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
 
@@ -102,13 +106,13 @@ public class R2RMLFromTables {
 			for (Column column : c.getColumns()) {
 				if (!column.name().endsWith(Columns.GRAPH)) {
 					if (column.name().endsWith(Columns.DATATYPE)) {
-						columnDefinition(model, vf, R2RML.datatype, map, column);
+						columnDefinition(model, vf, R2RML.datatype, map, column, vf::createIRI);
 					} else if (column.name().endsWith(Columns.LANG)) {
-						columnDefinition(model, vf, R2RML.language, map, column);
+						columnDefinition(model, vf, R2RML.language, map, column, vf::createLiteral);
 					} else if (column.name().endsWith(Columns.LANG_VALUE)) {
-						columnDefinition(model, vf, R2RML.template, map, column);
+						columnDefinition(model, vf, R2RML.template, map, column, vf::createLiteral);
 					} else if (column.name().endsWith(Columns.LIT_VALUE)) {
-						columnDefinition(model, vf, R2RML.template, map, column);
+						columnDefinition(model, vf, R2RML.template, map, column, vf::createLiteral);
 					}
 				} else {
 					addGraphs(model, vf, map, column);
@@ -131,7 +135,11 @@ public class R2RMLFromTables {
 		} else if (k == Kind.BNODE) {
 			for (Column column : c.getColumns()) {
 				if (!column.name().endsWith(Columns.GRAPH)) {
-					model.add(map, R2RML.template, vf.createLiteral('{' + column.name() + '}'));
+					if (column.isPhysical()) {
+						model.add(map, R2RML.template, vf.createLiteral('{' + column.name() + '}'));
+					} else {
+						model.add(map, R2RML.template, vf.createLiteral(((VirtualSingleValueColumn) column).value()));
+					}
 				} else {
 					addGraphs(model, vf, map, column);
 				}
@@ -142,7 +150,7 @@ public class R2RMLFromTables {
 	public static void addGraphs(Model model, SimpleValueFactory vf, Resource map, Column column) {
 		if (column.isVirtual()) {
 			final VirtualSingleValueColumn virtualColumn = (VirtualSingleValueColumn) column;
-			model.add(vf.createStatement(map, R2RML.graph, vf.createLiteral(virtualColumn.value())));
+			model.add(vf.createStatement(map, R2RML.graph, vf.createIRI(virtualColumn.value())));
 		} else {
 			Resource graphs = vf.createBNode();
 			model.add(vf.createStatement(map, R2RML.graphMap, graphs));
@@ -150,9 +158,9 @@ public class R2RMLFromTables {
 		}
 	}
 
-	private static void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Column column) {
+	private static void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Column column, Function<String, Value> create) {
 		if (column.isVirtual()) {
-			model.add(map, p, vf.createLiteral(((VirtualSingleValueColumn) column).value()));
+			model.add(map, p, create.apply(((VirtualSingleValueColumn) column).value()));
 		} else {
 			model.add(map, p, vf.createLiteral('{' + column.name() + '}'));
 		}

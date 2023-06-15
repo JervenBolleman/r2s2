@@ -4,7 +4,6 @@ import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -28,27 +27,30 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 
 	public void run() {
 		try (Connection conn_rw = open(temp)) {
-			Set<String> protocols = new HashSet<>();
-			String findDistinctProtocols = tables.stream()
-					.flatMap(table -> collectProtocolParts(conn_rw, protocols, table))
-					.collect(Collectors.joining(" UNION ", "(", ")"));
+			Set<String> protocols = tables.stream().flatMap(table -> collectProtocolParts(conn_rw, table))
+					.collect(Collectors.toSet());
+			//Can be the case if all are virtual
+			if (!protocols.isEmpty()) {
+				String findDistinctProtocols = protocols.stream().collect(Collectors.joining(" UNION ", "(", ")"));
 
-			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String sql = "CREATE TYPE " + SqlDatatype.PROTOCOL.label() + " AS ENUM (SELECT DISTINCT * FROM ("
-						+ findDistinctProtocols + "))";
-				logger.info("creating protocol part: " + sql);
-				stat.execute(sql);
-				tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+				try (java.sql.Statement stat = conn_rw.createStatement()) {
+					final String sql = "CREATE TYPE " + SqlDatatype.PROTOCOL.label()
+							+ " AS ENUM (SELECT DISTINCT * FROM (" + findDistinctProtocols + "))";
+					logger.info("creating protocol part: " + sql);
+					stat.execute(sql);
+					tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+				}
 			}
 		} catch (SQLException e) {
 			throw new IllegalStateException(e);
 		}
+
 	}
 
-	public Stream<String> collectProtocolParts(Connection conn_rw, Set<String> protocols, Table table) {
+	public Stream<String> collectProtocolParts(Connection conn_rw, Table table) {
 		return table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns).flatMap(List::stream)
 				.filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.PROTOCOL))
-				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name());
+				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name() + " WHERE "+c.name()+ " IS NOT NULL");
 	}
 
 	public void adaptProtocolParts(Connection conn_rw, Table table) {

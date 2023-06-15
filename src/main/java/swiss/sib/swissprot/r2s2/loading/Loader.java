@@ -10,11 +10,14 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
+import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,7 +38,9 @@ import swiss.sib.swissprot.r2s2.loading.steps.IntroduceHostEnums;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceProtocolEnums;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
+import swiss.sib.swissprot.r2s2.loading.steps.ReOptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
+import swiss.sib.swissprot.r2s2.optimization.IntroduceVirtualColumns;
 import swiss.sib.swissprot.r2s2.optimization.TableMergingConcurence;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.r2rml.TableDescriptionAsRdf;
@@ -76,14 +81,13 @@ public class Loader {
 		}
 	}
 
-
-	public Loader(File directoryToWriteToo, int step, List<String> lines) throws IOException, SQLException {
+	public Loader(File duckDbFile, int step, List<String> lines) {
 		super();
-		this.duckDbFile = directoryToWriteToo;
+		this.duckDbFile = duckDbFile;
 		this.step = step;
 		this.lines = lines;
-		if (!directoryToWriteToo.exists()) {
-			directoryToWriteToo.getParentFile().mkdirs();
+		if (!duckDbFile.exists()) {
+			duckDbFile.getParentFile().mkdirs();
 		}
 		namespaces.putIfAbsent("up", "http://purl.uniprot.org/core/");
 		namespaces.putIfAbsent(RDF.PREFIX, RDF.NAMESPACE);
@@ -112,7 +116,7 @@ public class Loader {
 	static Loader parse(File directoryToWriteToo, List<String> lines, int step) throws SQLException, IOException {
 
 		Loader wo = new Loader(directoryToWriteToo, step, lines);
-		wo.parse(lines);
+		wo.parse();
 
 		return wo;
 	}
@@ -133,29 +137,36 @@ public class Loader {
 		return new File(p, fn + "-r2rml.ttl");
 	}
 
-	private static final List<Consumer<Loader>> STEPS = List.of(
-			Loader::parseOrReloadState,
+	private static final List<Consumer<Loader>> STEPS = List.of(Loader::parseOrReloadState,
 			l -> new IntroduceGraphEnum(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
-			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), 
-			Loader::writeR2RML,
-			l -> l.tables = new TableMergingConcurence(l.tempPath(), l.tables).run(), 
-			Loader::writeR2RML,
-			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), 
-			Loader::writeR2RML,
+			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), Loader::writeR2RML,
+			l -> l.tables = new TableMergingConcurence(l.tempPath(), l.tables).run(), Loader::writeR2RML,
+			l -> l.tables = new ReOptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), Loader::writeR2RML,
 			l -> new IntroduceProtocolEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
 			l -> new IntroduceHostEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
 			l -> new Vacuum(l.tempPath(), l.duckDbFile.getAbsolutePath()).run());
 
+	public static void introduceVirtualColumns(Loader l) {
+		for (Table t : l.tables) {
+			try (Connection conn = open(l.tempPath())) {
+				IntroduceVirtualColumns.optimize(conn, t);
+			} catch (SQLException e) {
+				throw new IllegalArgumentException(e);
+			}
+		}
+	}
+
 	public static void parseOrReloadState(Loader l) {
 		try {
-		if (l.descriptionPath().exists()) {			
-			l.tables = TableDescriptionAsRdf.read(l.descriptionPath());
-		} else {
-			l.tables = new ParseIntoSOGTables(l.tempPath(), l.lines, l.predicatesInOrderOfSeen, l.temporaryGraphIdMap, l.namespaces)
-					.run();				
-		}
+			logger.info("Testing if "+l.descriptionPath() + " exists");
+			if (l.descriptionPath().exists()) {
+				l.tables = TableDescriptionAsRdf.read(l.descriptionPath());
+			} else {
+				l.tables = new ParseIntoSOGTables(l.tempPath(), l.lines, l.predicatesInOrderOfSeen,
+						l.temporaryGraphIdMap, l.namespaces).run();
+			}
 		} catch (IOException e) {
-			
+			throw new IllegalStateException(e);
 		}
 	}
 
@@ -167,7 +178,7 @@ public class Loader {
 		}
 	}
 
-	public void parse(List<String> lines) throws IOException, SQLException {
+	public void parse() throws IOException, SQLException {
 		if (step == 0) {
 			logger.info("Starting all steps ");
 			Instant start = Instant.now();
@@ -176,6 +187,7 @@ public class Loader {
 			}
 			logger.info("Finished all steps in " + Duration.between(start, Instant.now()));
 		} else {
+			tables = TableDescriptionAsRdf.read(descriptionPath());
 			runStep(step);
 		}
 	}

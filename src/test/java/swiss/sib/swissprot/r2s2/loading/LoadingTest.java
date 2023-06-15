@@ -29,7 +29,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import swiss.sib.swissprot.r2s2.optimization.TableMergingConcurence;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -41,7 +40,9 @@ public class LoadingTest {
 	@Test
 	public void simpleTest() throws IOException, SQLException {
 		File newFolder = temp.newFile("f");
-		File input = writeTestData(newFolder);
+		newFolder.delete();
+		File input = temp.newFile("input.rdf");
+		writeTestData(input);
 
 		assertDuckDbAvailable();
 		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
@@ -49,20 +50,19 @@ public class LoadingTest {
 		loader.runStep(0);
 		loader.runStep(1);
 		validateRdfTypeStatementsLoaded(loader);
-		loader.runStep(2);
 		writeR2RML(loader.tables());
+		loader.runStep(2);
 		loader.runStep(3);
 		writeR2RML(loader.tables());
 		loader.runStep(4);
 		writeR2RML(loader.tables());
-		List<Table> tables = new TableMergingConcurence(loader.tempPath(), loader.tables()).run();
+
 		try (Connection conn = open(loader.tempPath())) {
-			writeR2RML(tables);
 			validateRdfMerged(conn);
 		}
 	}
 
-	public void writeR2RML(List<Table> tables) throws IOException {
+	public static void writeR2RML(List<Table> tables) throws IOException {
 		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 			R2RMLFromTables.write(tables, out);
 			System.out.write(out.toByteArray());
@@ -79,14 +79,14 @@ public class LoadingTest {
 		try (java.sql.Statement count = conn.createStatement();
 				var rs = count.executeQuery("SELECT COUNT(object_rdfs_label_langvalue) FROM type_rdf_Alt")) {
 			assertTrue(rs.next());
-			assertEquals(1, rs.getInt(1));
+			assertEquals(2, rs.getInt(1));
 			assertFalse(rs.next());
 		}
-		
+
 		try (java.sql.Statement count = conn.createStatement();
-				var rs = count.executeQuery("SELECT COUNT(object_rdfs_labelxsd_boolean_litvalue) FROM type_rdf_Bag")) {
+				var rs = count.executeQuery("SELECT COUNT(object_rdfs_label_langvalue) FROM type_rdf_Bag")) {
 			assertTrue(rs.next());
-			assertEquals(2, rs.getInt(1));
+			assertEquals(1, rs.getInt(1));
 			assertFalse(rs.next());
 		}
 		try (java.sql.Statement count = conn.createStatement();
@@ -98,39 +98,25 @@ public class LoadingTest {
 			assertEquals(rs.getString(1), "subject_rdf_type_parts");
 			assertFalse(rs.next());
 		}
-		
+
 		try (java.sql.Statement count = conn.createStatement();
 				var rs = count.executeQuery(
 						"SELECT column_name FROM information_schema.columns WHERE table_name='type_rdf_Bag' ORDER BY column_name")) {
 			assertTrue(rs.next());
 			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
 			assertTrue(rs.next());
-			assertEquals(rs.getString(1), "object_rdfs_labelxsd_boolean_litvalue");
-			assertTrue(rs.next());
 			assertEquals(rs.getString(1), "subject_rdf_type_parts");
 			assertFalse(rs.next());
 		}
-
-		try (java.sql.Statement count = conn.createStatement();
-				var rs = count.executeQuery("SELECT object_rdfs_labelxsd_boolean_litvalue FROM type_rdf_Bag")) {
-			assertTrue(rs.next());
-			assertTrue(rs.next());
-			assertFalse(rs.next());
-		}
-
-	
-
 	}
 
-	public File writeTestData(File newFolder) throws IOException, FileNotFoundException {
-		newFolder.delete();
+	public static void writeTestData(File input) throws IOException, FileNotFoundException {
+
 		SimpleValueFactory vf = SimpleValueFactory.getInstance();
 
 		List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), 
-				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), 
-				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
+				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
+				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
 				vf.createStatement(RDF.LIST, RDFS.LABEL, vf.createLiteral(false)),
@@ -142,7 +128,6 @@ public class LoadingTest {
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-22", XSD.DATE)),
 				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
 		Optional<RDFWriterFactory> optional = RDFWriterRegistry.getInstance().get(RDFFormat.RDFXML);
-		File input = temp.newFile("input.rdf");
 		if (optional.isEmpty())
 			fail("Test config error");
 		else {
@@ -154,7 +139,6 @@ public class LoadingTest {
 				writer.endRDF();
 			}
 		}
-		return input;
 	}
 
 	public void assertDuckDbAvailable() {
