@@ -37,9 +37,9 @@ public class SparqlOnLoadedTest {
 		try (Connection conn = DriverManager.getConnection("jdbc:duckdb:" + newFolder.getAbsolutePath());
 				var statement = conn.createStatement()) {
 			try (ResultSet rs = statement
-					.executeQuery("SELECT table_name, column_name FROM information_schema.columns")) {
+					.executeQuery("SELECT table_name, column_name,data_type FROM information_schema.columns")) {
 				while (rs.next()) {
-					System.out.println(rs.getString(1) + '.' + rs.getString(2));
+					System.out.println(rs.getString(1) + '.' + rs.getString(2) +" : "+ rs.getString(3));
 				}
 			}
 

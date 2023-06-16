@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -47,6 +48,8 @@ public class R2RMLFromTables {
 	}
 
 	public static void write(List<Table> tables, OutputStream os) throws IOException {
+		final List<Table> copyOf = new ArrayList<>(tables);
+		copyOf.sort((a,b)->a.name().compareTo(b.name()));
 		final Model model = model(tables);
 		try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(os))) {
 			ModelWritingHelper.writeModel(model, out);
@@ -110,9 +113,9 @@ public class R2RMLFromTables {
 					} else if (column.name().endsWith(Columns.LANG)) {
 						columnDefinition(model, vf, R2RML.language, map, column, vf::createLiteral);
 					} else if (column.name().endsWith(Columns.LANG_VALUE)) {
-						columnDefinition(model, vf, R2RML.template, map, column, vf::createLiteral);
+						columnDefinition(model, vf, R2RML.column, map, column, vf::createLiteral);
 					} else if (column.name().endsWith(Columns.LIT_VALUE)) {
-						columnDefinition(model, vf, R2RML.template, map, column, vf::createLiteral);
+						columnDefinition(model, vf, R2RML.column, map, column, vf::createLiteral);
 					}
 				} else {
 					addGraphs(model, vf, map, column);
@@ -136,7 +139,7 @@ public class R2RMLFromTables {
 			for (Column column : c.getColumns()) {
 				if (!column.name().endsWith(Columns.GRAPH)) {
 					if (column.isPhysical()) {
-						model.add(map, R2RML.template, vf.createLiteral('{' + column.name() + '}'));
+						model.add(map, R2RML.column, vf.createLiteral(column.name()));
 					} else {
 						model.add(map, R2RML.template, vf.createLiteral(((VirtualSingleValueColumn) column).value()));
 					}
@@ -162,7 +165,7 @@ public class R2RMLFromTables {
 		if (column.isVirtual()) {
 			model.add(map, p, create.apply(((VirtualSingleValueColumn) column).value()));
 		} else {
-			model.add(map, p, vf.createLiteral('{' + column.name() + '}'));
+			model.add(map, p, vf.createLiteral(column.name()));
 		}
 	}
 

@@ -6,6 +6,7 @@ import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.vocabulary.R2RML;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.Rio;
@@ -23,6 +24,7 @@ public class ModelWritingHelper {
 		r2rmlWriter.handleNamespace(R2RML.PREFIX, R2RML.NAMESPACE);
 		r2rmlWriter.handleNamespace(RDF.PREFIX, RDF.NAMESPACE);
 		r2rmlWriter.handleNamespace(RDFS.PREFIX, RDFS.NAMESPACE);
+		r2rmlWriter.handleNamespace(XSD.PREFIX, XSD.NAMESPACE);
 		for (var s : model) {
 			r2rmlWriter.handleStatement(s);
 		}
