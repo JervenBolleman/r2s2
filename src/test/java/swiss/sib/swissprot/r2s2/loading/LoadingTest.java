@@ -94,7 +94,7 @@ public class LoadingTest {
 		try (java.sql.Statement count = conn.createStatement();
 				var rs = count.executeQuery("SELECT COUNT(object_rdfs_label_langvalue) FROM type_rdf_Alt")) {
 			assertTrue(rs.next());
-			assertEquals(2, rs.getInt(1));
+			assertEquals(1, rs.getInt(1));
 			assertFalse(rs.next());
 		}
 

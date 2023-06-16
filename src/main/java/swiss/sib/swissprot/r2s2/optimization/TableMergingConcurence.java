@@ -77,7 +77,7 @@ public class TableMergingConcurence {
 			return 1;
 		else {
 			final int sizeComparison = Long.compare(size(a, false), size(b, false));
-			if (sizeComparison == 1) {
+			if (sizeComparison == 0) {
 				return a.name().compareTo(b.name());
 			}
 			return sizeComparison;
