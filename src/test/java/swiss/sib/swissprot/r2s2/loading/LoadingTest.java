@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,13 +37,27 @@ public class LoadingTest {
 
 	@Rule
 	public TemporaryFolder temp = new TemporaryFolder();
-
+	private static final SimpleValueFactory vf = SimpleValueFactory.getInstance();
+	
+	public static final List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
+			vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
+			vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
+			vf.createStatement(RDF.LIST, RDFS.LABEL, vf.createLiteral(false)),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("杭州市", "cz")),
+			vf.createStatement(RDF.BAG, RDFS.LABEL, vf.createLiteral("杭州", "cz")),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala", "en-UK")),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala lala", "en-UK")),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-23", XSD.DATE)),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-22", XSD.DATE)),
+			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
 	@Test
 	public void simpleTest() throws IOException, SQLException {
 		File newFolder = temp.newFile("f");
 		newFolder.delete();
 		File input = temp.newFile("input.rdf");
-		writeTestData(input);
+		writeTestData(input, statements);
 
 		assertDuckDbAvailable();
 		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
@@ -110,23 +125,11 @@ public class LoadingTest {
 		}
 	}
 
-	public static void writeTestData(File input) throws IOException, FileNotFoundException {
+	public static void writeTestData(File input, Collection<Statement> statements) throws IOException, FileNotFoundException {
 
-		SimpleValueFactory vf = SimpleValueFactory.getInstance();
+		
 
-		List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.ALT, RDF.TYPE, RDF.BAG), vf.createStatement(RDF.ALT, RDF.TYPE, RDF.ALT),
-				vf.createStatement(RDF.LIST, RDF.TYPE, RDF.ALT), vf.createStatement(RDF.LIST, RDF.TYPE, RDF.BAG),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(true)),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral(false)),
-				vf.createStatement(RDF.LIST, RDFS.LABEL, vf.createLiteral(false)),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("杭州市", "cz")),
-				vf.createStatement(RDF.BAG, RDFS.LABEL, vf.createLiteral("杭州", "cz")),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala", "en-UK")),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("lala lala", "en-UK")),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-23", XSD.DATE)),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createLiteral("2023-06-22", XSD.DATE)),
-				vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
+		
 		Optional<RDFWriterFactory> optional = RDFWriterRegistry.getInstance().get(RDFFormat.RDFXML);
 		if (optional.isEmpty())
 			fail("Test config error");
