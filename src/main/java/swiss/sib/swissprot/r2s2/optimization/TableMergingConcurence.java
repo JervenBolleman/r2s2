@@ -171,7 +171,8 @@ public class TableMergingConcurence {
 				+ toMerge.stream().map(oc -> "" + oc.name() + " = oc." + oc.name()).collect(Collectors.joining(" , "))
 				+ " FROM " + other.name() + " oc WHERE " + concatSubjectColumns(mc, "") + '=' + osc;
 
-		String delete = "DELETE FROM " + other.name() + " oc USING " + mc.name() + " mc WHERE " + msc + '=' + osc;
+		String delete = "DELETE FROM " + other.name() + " oc USING " + mc.name() + " mc WHERE " + msc + '=' + osc + " AND "
+				+ toMerge.stream().map(oc -> "mc." + oc.name() + " = oc." + oc.name()).collect(Collectors.joining(" AND "));
 
 		logger.info(update);
 		stat.execute(update);
