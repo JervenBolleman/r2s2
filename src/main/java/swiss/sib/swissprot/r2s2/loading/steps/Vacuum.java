@@ -45,7 +45,7 @@ public record Vacuum(String temp, String destination) {
 			throw new IllegalStateException(e);
 		}
 		try {
-			logger.info("deleting temporary datbase");
+			logger.info("deleting temporary database");
 			Files.delete(new File(temp).toPath());
 		} catch (IOException e) {
 			throw new RuntimeException(e);
