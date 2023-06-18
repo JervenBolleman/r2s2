@@ -25,7 +25,7 @@ import org.eclipse.rdf4j.rio.Rio;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -50,7 +50,7 @@ public class TableDescriptionAsRdf {
 		model.add(vf.createStatement(table, RDFS.LABEL, vf.createLiteral(t.name())));
 		model.add(vf.createStatement(table, TableAsRdf.subjectColumns, subjectColumns));
 		model.add(vf.createStatement(table, TableAsRdf.kind, vf.createLiteral(t.subjectKind().label())));
-		for (Column c : t.subject().getColumns()) {
+		for (Column c : t.subject().columns()) {
 			Resource subjectColumn = vf.createBNode();// "tablename_" + name());
 			addColumn(model, vf, subjectColumns, c, subjectColumn);
 		}
@@ -64,7 +64,7 @@ public class TableDescriptionAsRdf {
 				model.add(vf.createStatement(objectColumns, TableAsRdf.datatype, p.datatype()));
 			if (p.lang() != null)
 				model.add(vf.createStatement(objectColumns, TableAsRdf.lang, vf.createLiteral(p.lang())));
-			for (Column c : p.columns().getColumns()) {
+			for (Column c : p.groupOfColumns().columns()) {
 				Resource objectColumn = vf.createBNode();// "tablename_" + name());
 				addColumn(model, vf, objectColumns, c, objectColumn);
 			}
@@ -111,7 +111,7 @@ public class TableDescriptionAsRdf {
 			List<Column> subjectColumns = findColumns(model, tableBnode);
 			Kind subjectKind = findKind(model, tableBnode.getSubject());
 			List<PredicateMap> opm = findPredicateMaps(model, tableBnode);
-			table = new Table(tableName, new Columns(subjectColumns), subjectKind, opm);
+			table = new Table(tableName, new GroupOfColumns(subjectColumns), subjectKind, opm);
 			tables.add(table);
 		}
 		return tables;
@@ -126,7 +126,7 @@ public class TableDescriptionAsRdf {
 			IRI predicate = readIriFrom(model, TableAsRdf.predicate, cbn);
 			String lang = readStringFrom(model, TableAsRdf.lang, cbn);
 			IRI datatype = readIriFrom(model, TableAsRdf.datatype, cbn);
-			pms.add(new PredicateMap(predicate, new Columns(columnList), objectKind, lang, datatype));
+			pms.add(new PredicateMap(predicate, new GroupOfColumns(columnList), objectKind, lang, datatype));
 		}
 		return pms;
 	}

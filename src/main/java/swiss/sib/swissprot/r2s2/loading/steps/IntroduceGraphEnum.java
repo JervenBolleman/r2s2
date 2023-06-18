@@ -15,7 +15,7 @@ import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -36,8 +36,8 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 
 			for (Table table : tables) {
 				for (PredicateMap pm : table.objects()) {
-					final Iterator<Column> iterator = pm.columns().getColumns().stream()
-							.filter(c -> c.name().endsWith(Columns.GRAPH)).iterator();
+					final Iterator<Column> iterator = pm.groupOfColumns().columns().stream()
+							.filter(c -> c.name().endsWith(GroupOfColumns.GRAPH)).iterator();
 					while (iterator.hasNext()) {
 						Column graphColumn = iterator.next();
 						StringBuilder asCase = buildCase(graphColumn);

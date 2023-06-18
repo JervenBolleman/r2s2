@@ -22,11 +22,11 @@ public class OptimizeForLongestCommonSubstring {
 
 	public static void optimize(Connection conn, Table table) {
 		if (table.subjectKind() == Kind.IRI) {
-			replaceLongestStartingPrefixWithVirtual(table, table.subject().getColumns(), conn);
+			replaceLongestStartingPrefixWithVirtual(table, table.subject().columns(), conn);
 		}
 		for (PredicateMap p : table.objects()) {
 			if (p.objectKind() == Kind.IRI)
-				replaceLongestStartingPrefixWithVirtual(table, p.columns().getColumns(), conn);
+				replaceLongestStartingPrefixWithVirtual(table, p.groupOfColumns().columns(), conn);
 		}
 	}
 

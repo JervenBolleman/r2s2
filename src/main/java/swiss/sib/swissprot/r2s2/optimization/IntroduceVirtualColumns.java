@@ -20,9 +20,9 @@ public class IntroduceVirtualColumns {
 
 	public static void optimize(Connection conn, Table table) {
 
-		replaceSingleValueColumnsWithVirtual(table, table.subject().getColumns(), conn);
+		replaceSingleValueColumnsWithVirtual(table, table.subject().columns(), conn);
 		for (PredicateMap p : table.objects()) {
-			replaceSingleValueColumnsWithVirtual(table, p.columns().getColumns(), conn);
+			replaceSingleValueColumnsWithVirtual(table, p.groupOfColumns().columns(), conn);
 		}
 	}
 

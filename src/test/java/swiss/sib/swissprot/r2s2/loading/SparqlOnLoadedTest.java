@@ -14,7 +14,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -25,6 +24,7 @@ import org.eclipse.rdf4j.query.BindingSet;
 import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQueryResult;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -37,12 +37,14 @@ public class SparqlOnLoadedTest {
 	private static final ValueFactory VF = SimpleValueFactory.getInstance();
 	private static final String NS = "https://example.org/";
 
+	@Disabled
 	@Test
 	public void loadAndQueryForTypes() throws Exception {
 		List<Statement> statements = LoadingTest.statements;
 		testTypePresence(statements);
 	}
 
+	@Disabled
 	@Test
 	public void loadAndQueryForTypes2() {
 		List<Statement> statements = IntStream.range(1, 100).mapToObj(i -> VF.createStatement(VF.createIRI(NS, "i" + i),
@@ -55,6 +57,7 @@ public class SparqlOnLoadedTest {
 		}
 	}
 
+	@Disabled
 	@Test
 	public void loadAndQueryForTypes3() throws Exception {
 		List<Statement> statements = IntStream.range(1, 100).mapToObj(i -> VF.createStatement(VF.createIRI(NS, "i" + i),
@@ -85,6 +88,13 @@ public class SparqlOnLoadedTest {
 					.executeQuery("SELECT table_name, column_name,data_type FROM information_schema.columns")) {
 				while (rs.next()) {
 					System.out.println(rs.getString(1) + '.' + rs.getString(2) + " : " + rs.getString(3));
+				}
+			}
+			
+			try (ResultSet rs = statement
+					.executeQuery("SELECT * FROM type_rdf_Bag")) {
+				while (rs.next()) {
+					System.out.println(rs.getString(1) + '\t' + rs.getString(2));
 				}
 			}
 

@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -21,7 +21,7 @@ public class OptimizeForDatatype {
 
 	public static void optimize(Connection conn, Table table) {
 		for (PredicateMap p : table.objects()) {
-			for (Column c : p.columns().getColumns()) {
+			for (Column c : p.groupOfColumns().columns()) {
 				alterForDatatype(conn, table, p, c, XSD.INT, SqlDatatype.INTEGER, "");
 				alterForDatatype(conn, table, p, c, XSD.INTEGER, SqlDatatype.NUMERIC, "");
 				alterForDatatype(conn, table, p, c, XSD.LONG, SqlDatatype.BIGINT, "");
@@ -37,7 +37,7 @@ public class OptimizeForDatatype {
 
 	public static void alterForDatatype(Connection conn, Table table, PredicateMap p, Column c, final IRI xsd,
 			final SqlDatatype sql, String cast) {
-		if (c.isPhysical() && c.name().endsWith(Columns.LIT_VALUE)) {
+		if (c.isPhysical() && c.name().endsWith(GroupOfColumns.LIT_VALUE)) {
 			if (xsd.equals(p.datatype()) && c.sqlDatatype() != sql) {
 				alterTableTo(table, c, sql, conn, cast);
 			}

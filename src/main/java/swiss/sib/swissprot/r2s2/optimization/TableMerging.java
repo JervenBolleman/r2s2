@@ -48,7 +48,7 @@ public class TableMerging {
 			}
 		}
 		Map<List<Column>, List<Table>> collect = mergeCandidates.stream()
-				.collect(Collectors.groupingBy((t) -> t.subject().getColumns()));
+				.collect(Collectors.groupingBy((t) -> t.subject().columns()));
 		List<Table> merged = new ArrayList<>();
 		for (var en : collect.entrySet()) {
 			var tablesToMerge = en.getValue();
@@ -75,7 +75,7 @@ public class TableMerging {
 		try (var stat = conn.createStatement()) {
 			for (PredicateMap pm : next.objects()) {
 				List<Column> toMerge = new ArrayList<>();
-				for (Column oc : pm.columns().getColumns()) {
+				for (Column oc : pm.groupOfColumns().columns()) {
 					if (oc.isPhysical()) {
 						String alter = "ALTER TABLE " + tableToMergeInto.name() + " ADD COLUMN " + oc.definition();
 						log.info(alter);
@@ -84,10 +84,10 @@ public class TableMerging {
 					}
 				}
 
-				String listOfInsert = Stream.concat(next.subject().getColumns().stream(), toMerge.stream())
+				String listOfInsert = Stream.concat(next.subject().columns().stream(), toMerge.stream())
 						.filter(c -> !c.isVirtual()).map(c -> c.name()).collect(Collectors.joining(", "));
 
-				String subjsame = next.subject().getColumns().stream().filter(c -> !c.isVirtual())
+				String subjsame = next.subject().columns().stream().filter(c -> !c.isVirtual())
 						.map(c -> tableToMergeInto.name() + "." + c.name() + " = " + next.name() + '.' + c.name())
 						.collect(Collectors.joining(" AND "));
 
@@ -153,6 +153,6 @@ public class TableMerging {
 	}
 
 	public List<Column> physicalColumns(Table t) {
-		return t.subject().getColumns().stream().filter(Column::isPhysical).collect(Collectors.toList());
+		return t.subject().columns().stream().filter(Column::isPhysical).collect(Collectors.toList());
 	}
 }

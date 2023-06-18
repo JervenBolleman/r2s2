@@ -21,7 +21,7 @@ import org.eclipse.rdf4j.model.vocabulary.RDF;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
@@ -81,10 +81,10 @@ public class R2RMLFromTables {
 			boolean allVirtual = true;
 			StringBuilder template = new StringBuilder();
 
-			for (Column c : p.columns().getColumns()) {
+			for (Column c : p.groupOfColumns().columns()) {
 				if (!c.isVirtual()) {
 					allVirtual = false;
-				} else if (!c.name().endsWith(Columns.GRAPH)) {
+				} else if (!c.name().endsWith(GroupOfColumns.GRAPH)) {
 					template.append(((VirtualSingleValueColumn) c).value());
 				} else {
 					addGraphs(model, vf, table, c);
@@ -99,22 +99,22 @@ public class R2RMLFromTables {
 		model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
 		model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
 
-		createTemplate(model, vf, objectMap, p.objectKind(), "object", p.columns());
+		createTemplate(model, vf, objectMap, p.objectKind(), "object", p.groupOfColumns());
 
 	}
 
-	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, Columns c) {
+	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, GroupOfColumns c) {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
-			for (Column column : c.getColumns()) {
-				if (!column.name().endsWith(Columns.GRAPH)) {
-					if (column.name().endsWith(Columns.DATATYPE)) {
+			for (Column column : c.columns()) {
+				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
+					if (column.name().endsWith(GroupOfColumns.DATATYPE)) {
 						columnDefinition(model, vf, R2RML.datatype, map, column, vf::createIRI);
-					} else if (column.name().endsWith(Columns.LANG)) {
+					} else if (column.name().endsWith(GroupOfColumns.LANG)) {
 						columnDefinition(model, vf, R2RML.language, map, column, vf::createLiteral);
-					} else if (column.name().endsWith(Columns.LANG_VALUE)) {
+					} else if (column.name().endsWith(GroupOfColumns.LANG_VALUE)) {
 						columnDefinition(model, vf, R2RML.column, map, column, vf::createLiteral);
-					} else if (column.name().endsWith(Columns.LIT_VALUE)) {
+					} else if (column.name().endsWith(GroupOfColumns.LIT_VALUE)) {
 						columnDefinition(model, vf, R2RML.column, map, column, vf::createLiteral);
 					}
 				} else {
@@ -123,8 +123,8 @@ public class R2RMLFromTables {
 			}
 		} else if (k == Kind.IRI) {
 			StringBuilder template = new StringBuilder();
-			for (Column column : c.getColumns()) {
-				if (!column.name().endsWith(Columns.GRAPH)) {
+			for (Column column : c.columns()) {
+				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
 					if (column.isVirtual()) {
 						template.append(((VirtualSingleValueColumn) column).value());
 					} else {
@@ -136,8 +136,8 @@ public class R2RMLFromTables {
 			}
 			model.add(map, R2RML.template, vf.createLiteral(template.toString()));
 		} else if (k == Kind.BNODE) {
-			for (Column column : c.getColumns()) {
-				if (!column.name().endsWith(Columns.GRAPH)) {
+			for (Column column : c.columns()) {
+				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
 					if (column.isPhysical()) {
 						model.add(map, R2RML.column, vf.createLiteral(column.name()));
 					} else {

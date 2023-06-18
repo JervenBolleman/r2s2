@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -48,14 +48,14 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 	}
 
 	public Stream<String> collectProtocolParts(Connection conn_rw, Table table) {
-		return table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns).flatMap(List::stream)
-				.filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.PROTOCOL))
+		return table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns).flatMap(List::stream)
+				.filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.PROTOCOL))
 				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name() + " WHERE "+c.name()+ " IS NOT NULL");
 	}
 
 	public void adaptProtocolParts(Connection conn_rw, Table table) {
-		final Iterator<Column> iterator = table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns)
-				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(Columns.PROTOCOL))
+		final Iterator<Column> iterator = table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns)
+				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.PROTOCOL))
 				.iterator();
 		while (iterator.hasNext()) {
 			Column protocolColumn = iterator.next();

@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -51,7 +51,7 @@ public class RdfTypeSplitting {
 		List<Table> newTables = new ArrayList<>();
 		List<Column> notVirtual = new ArrayList<>();
 		List<Column> virtual = new ArrayList<>();
-		for (Column c : pm.columns().getColumns()) {
+		for (Column c : pm.groupOfColumns().columns()) {
 			if (c.isVirtual())
 				virtual.add(c);
 			else
@@ -100,7 +100,7 @@ public class RdfTypeSplitting {
 			newTable = makeNewTable(t, conn, pm.copy(), tableName);
 		} catch (SQLException e) {
 			// Can happen if the table name is not valid.
-			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new Columns(t.subject().getColumns()),
+			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new GroupOfColumns(t.subject().columns()),
 					t.subjectKind(), List.of(pm.copy()));
 		}
 		newTables.add(newTable);
@@ -121,7 +121,7 @@ public class RdfTypeSplitting {
 	}
 
 	private static Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
-		Table newTable = new Table("type_" + tableName, new Columns(t.subject().getColumns()), t.subjectKind(),
+		Table newTable = new Table("type_" + tableName, new GroupOfColumns(t.subject().columns()), t.subjectKind(),
 				List.of(pm));
 		newTable.create(conn);
 		return newTable;
@@ -129,7 +129,7 @@ public class RdfTypeSplitting {
 
 	private static String newTableName(List<Column> notVirtual, ResultSet rs, Map<String, String> namespaces)
 			throws SQLException {
-		List<Column> forName = notVirtual.stream().filter(c -> !c.name().endsWith(Columns.GRAPH))
+		List<Column> forName = notVirtual.stream().filter(c -> !c.name().endsWith(GroupOfColumns.GRAPH))
 				.collect(Collectors.toList());
 		String typeIri = rs.getObject(1).toString();
 		for (int i = 2; i <= forName.size(); i++) {

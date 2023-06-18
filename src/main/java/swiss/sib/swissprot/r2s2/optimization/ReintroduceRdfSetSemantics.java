@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.DuckDBUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
@@ -19,8 +19,8 @@ public class ReintroduceRdfSetSemantics {
 	private static final Logger log = LoggerFactory.getLogger(ReintroduceRdfSetSemantics.class);
 
 	public static void optimize(Connection conn, Table table) {
-		final Stream<Column> subjectColums = table.subject().getColumns().stream();
-		final Stream<Column> objectColums = table.objects().stream().map(PredicateMap::columns).map(Columns::getColumns)
+		final Stream<Column> subjectColums = table.subject().columns().stream();
+		final Stream<Column> objectColums = table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns)
 				.flatMap(List::stream);
 		final boolean thereIsAtLeastOnePhysicalColumn = Stream.concat(subjectColums, objectColums)
 				.filter(Column::isPhysical).findAny().isPresent();

@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.Naming;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -70,17 +70,17 @@ public final class LoadIntoTable implements AutoCloseable {
 			lang = lit.getLanguage().orElse(null);
 			datatype = lit.getDatatype();
 		}
-		Columns subjectColumns = Columns.from(subjectKind, lang, datatype, "subject_", namespaces,predicate);
-		Columns objectColumns = Columns.from(objectKind, lang, datatype, "object_",namespaces, predicate);
-		Column objectGraphColumn = Columns.graphColumn(objectKind, lang, datatype, "object_",namespaces, predicate);
-		objectColumns.getColumns().add(objectGraphColumn);
+		GroupOfColumns subjectColumns = GroupOfColumns.from(subjectKind, lang, datatype, "subject_", namespaces,predicate);
+		GroupOfColumns objectColumns = GroupOfColumns.from(objectKind, lang, datatype, "object_",namespaces, predicate);
+		Column objectGraphColumn = GroupOfColumns.graphColumn(objectKind, lang, datatype, "object_",namespaces, predicate);
+		objectColumns.columns().add(objectGraphColumn);
 		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
 		this.table = makeTable(predicate, subjectColumns, objectColumns, tableName);
 
 		this.appender = conn.createAppender("", table.name());
 	}
 
-	public Table makeTable(TempIriId predicate, Columns subjectColumns, Columns objectColumns, 
+	public Table makeTable(TempIriId predicate, GroupOfColumns subjectColumns, GroupOfColumns objectColumns, 
 			final String tableName) throws SQLException {
 		Table table;
 		try {
@@ -196,7 +196,7 @@ public final class LoadIntoTable implements AutoCloseable {
 			lock.lock();
 			appender.beginRow();
 			table.subject().add(subjectS, appender);
-			table.objects().get(0).columns().add(objectS, tempGraphId, appender);
+			table.objects().get(0).groupOfColumns().add(objectS, tempGraphId, appender);
 			appender.endRow();
 			if (c % FLUSH_EVERY_X == 0) {
 				appender.flush();

@@ -105,11 +105,11 @@ public class TableMergingConcurence {
 	 * Avoid dropping tables that have all virtual columns.
 	 */
 	private boolean allColumnsVirtual(Table t) {
-		for (Column c : t.subject().getColumns())
+		for (Column c : t.subject().columns())
 			if (c.isPhysical())
 				return false;
 		for (PredicateMap p : t.objects()) {
-			for (Column c : p.columns().getColumns())
+			for (Column c : p.groupOfColumns().columns())
 				if (c.isPhysical())
 					return false;
 		}
@@ -145,7 +145,7 @@ public class TableMergingConcurence {
 		for (PredicateMap pm : other.objects()) {
 			List<Column> toMerge = new ArrayList<>();
 			try (Connection conn = open(path); var stat = conn.createStatement()) {
-				for (Column oc : pm.columns().getColumns()) {
+				for (Column oc : pm.groupOfColumns().columns()) {
 					if (oc.isPhysical()) {
 						String alter = "ALTER TABLE " + mc.name() + " ADD COLUMN " + oc.definition();
 						logger.info(alter);
@@ -216,7 +216,7 @@ public class TableMergingConcurence {
 	}
 
 	public String concatSubjectColumns(Table mc, String alias) {
-		return mc.subject().getColumns().stream().map(c -> {
+		return mc.subject().columns().stream().map(c -> {
 			if (c.isPhysical()) {
 				if (alias.isEmpty()) {
 					return c.name();
@@ -230,7 +230,7 @@ public class TableMergingConcurence {
 	}
 
 	private boolean hasDistinctSubjects(Table t) {
-		String sc = t.subject().getColumns().stream().filter(Column::isPhysical).map(Column::name)
+		String sc = t.subject().columns().stream().filter(Column::isPhysical).map(Column::name)
 				.collect(Collectors.joining(","));
 		if (sc.isEmpty()) {
 			return false;

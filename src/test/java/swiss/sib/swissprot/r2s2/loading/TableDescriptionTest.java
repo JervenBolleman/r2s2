@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.r2rml.TableDescriptionAsRdf;
-import swiss.sib.swissprot.r2s2.sql.Columns;
+import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 import swiss.sib.swissprot.r2s2.sql.VirtualSingleValueColumn;
@@ -28,10 +28,10 @@ public class TableDescriptionTest {
 
 	@Test
 	void twoTablesSOG() {
-		final Columns zeroSubjectColumns = Columns.from(Kind.IRI, null, null, "subject_", Map.of(), zeroIri);
-		final Columns zeroObjectColumns = Columns.from(Kind.IRI, null, null, "object_", Map.of(), zeroIri);
-		final Columns oneSubjectColumns = Columns.from(Kind.IRI, null, null, "subject_", Map.of(), oneIri);
-		final Columns oneObjectColumns = Columns.from(Kind.IRI, null, null, "object_", Map.of(), oneIri);
+		final GroupOfColumns zeroSubjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "subject_", Map.of(), zeroIri);
+		final GroupOfColumns zeroObjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "object_", Map.of(), zeroIri);
+		final GroupOfColumns oneSubjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "subject_", Map.of(), oneIri);
+		final GroupOfColumns oneObjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "object_", Map.of(), oneIri);
 		var zero = new Table(zeroIri, zeroSubjectColumns, Kind.IRI, zeroObjectColumns, Kind.IRI, null, null);
 		var one = new Table(oneIri, oneSubjectColumns, Kind.IRI, oneObjectColumns, Kind.IRI, null, null);
 		final Model model = TableDescriptionAsRdf.model(List.of(zero, one));
@@ -46,10 +46,10 @@ public class TableDescriptionTest {
 
 	@Test
 	void twoTablesVirualSOG() {
-		final Columns zeroSubjectColumns = Columns.from(Kind.IRI, null, null, "subject_", Map.of(), zeroIri);
-		final Columns zeroObjectColumns = Columns.from(Kind.IRI, null, null, "object_", Map.of(), zeroIri);
-		final Columns oneSubjectColumns = Columns.from(Kind.IRI, null, null, "subject_", Map.of(), oneIri);
-		final Columns oneObjectColumns = new Columns(
+		final GroupOfColumns zeroSubjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "subject_", Map.of(), zeroIri);
+		final GroupOfColumns zeroObjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "object_", Map.of(), zeroIri);
+		final GroupOfColumns oneSubjectColumns = GroupOfColumns.from(Kind.IRI, null, null, "subject_", Map.of(), oneIri);
+		final GroupOfColumns oneObjectColumns = new GroupOfColumns(
 				List.of(new VirtualSingleValueColumn("t", SqlDatatype.TEXT, oneIri.stringValue())));
 		var zero = new Table(zeroIri, zeroSubjectColumns, Kind.IRI, zeroObjectColumns, Kind.IRI, null, null);
 		var one = new Table(oneIri, oneSubjectColumns, Kind.IRI, oneObjectColumns, Kind.IRI, null, null);

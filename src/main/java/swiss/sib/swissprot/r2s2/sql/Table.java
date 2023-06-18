@@ -20,14 +20,14 @@ import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 
 public class Table {
 	private static final Logger log = LoggerFactory.getLogger(Table.class);
-	private final Columns subject;
+	private final GroupOfColumns subject;
 	private final List<PredicateMap> objects = new ArrayList<>();
 
 	private final Kind subjectKind;
 	private final String name;
 	private static final AtomicInteger ID_GEN = new AtomicInteger();
 
-	public Table(IRI predicate, Columns subject, Kind subjectKind, Columns object, Kind objectKind, String lang,
+	public Table(IRI predicate, GroupOfColumns subject, Kind subjectKind, GroupOfColumns object, Kind objectKind, String lang,
 			IRI datatype) {
 		super();
 		this.subject = subject;
@@ -62,7 +62,7 @@ public class Table {
 		return name;
 	}
 
-	public Table(String name, Columns subject, Kind subjectKind, List<PredicateMap> objects) {
+	public Table(String name, GroupOfColumns subject, Kind subjectKind, List<PredicateMap> objects) {
 		super();
 		this.subject = subject;
 		this.subjectKind = subjectKind;
@@ -70,7 +70,7 @@ public class Table {
 		this.name = name;
 	}
 
-	public Columns subject() {
+	public GroupOfColumns subject() {
 		return subject;
 	}
 
@@ -80,7 +80,7 @@ public class Table {
 
 	public void create(Connection conn) throws SQLException {
 		final Stream<String> map = objects.stream()
-				.map((p) -> p.columns().definition());
+				.map((p) -> p.groupOfColumns().definition());
 		String objectsDefinition = map
 				.filter(Predicate.not(String::isBlank))
 				.collect(Collectors.joining(","));
