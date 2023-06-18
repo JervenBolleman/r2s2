@@ -63,7 +63,7 @@ public class R2RMLFromTables {
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
 		model.add(vf.createStatement(table, RDF.TYPE, R2RML.TriplesMap));
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
-		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral("main."+t.name())));
+		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral("main."+t.name().toLowerCase())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
 
 		createTemplate(model, vf, subjectMap, t.subjectKind(), "subject", t.subject());

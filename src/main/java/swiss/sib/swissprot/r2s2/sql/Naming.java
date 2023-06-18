@@ -18,25 +18,25 @@ public class Naming {
 		CoreDatatype cdt = CoreDatatype.from(iri);
 		if (cdt != null) {
 			if (cdt.isXSDDatatype()) {
-				return "xsd_" + iri.getLocalName();
+				return "xsd_" + iri.getLocalName().toLowerCase();
 			} else if (cdt.isRDFDatatype()) {
-				return "rdf_" + iri.getLocalName();
+				return "rdf_" + iri.getLocalName().toLowerCase();
 			} else if (cdt.isGEODatatype()) {
-				return "geo_" + iri.getLocalName();
+				return "geo_" + iri.getLocalName().toLowerCase();
 			}
 		}
 		String iriS = iri.stringValue();
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {
 			if (iriS.startsWith(en.getValue()) && !en.getKey().isEmpty()) {
 				final String preName = en.getKey() + "_" + iriS.substring(en.getValue().length());
-				return preName;
+				return preName.toLowerCase();
 			}
 		}
 		byte[] encode;
 		try {
 			encode = Base64.getEncoder().encode(iri.stringValue().getBytes(StandardCharsets.UTF_8));
 			//can't have the last = 
-			return new String(encode, 0, encode.length - 1, StandardCharsets.UTF_8);
+			return new String(encode, 0, encode.length - 1, StandardCharsets.UTF_8).toLowerCase();
 		} catch (Exception e) {
 			if (iri instanceof TempIriId) {
 				return "__" + ((TempIriId) iri).id();
