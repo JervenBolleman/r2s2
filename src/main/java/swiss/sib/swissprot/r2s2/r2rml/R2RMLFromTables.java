@@ -69,12 +69,12 @@ public class R2RMLFromTables {
 		createTemplate(model, vf, subjectMap, t.subjectKind(), "subject", t.subject());
 
 		for (PredicateMap p : t.objects()) {
-			createPredicateMap(model, vf, table, p);
+			createPredicateMap(model, vf, table, p, subjectMap);
 		}
 		return model;
 	}
 
-	private static void createPredicateMap(Model model, SimpleValueFactory vf, Resource table, PredicateMap p) {
+	private static void createPredicateMap(Model model, SimpleValueFactory vf, Resource table, PredicateMap p, Resource subjectMap) {
 		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
 		Resource objectMap = vf.createBNode();// "objectMap_" + name());
 		if (p.predicate().equals(RDF.TYPE)) {
@@ -87,11 +87,11 @@ public class R2RMLFromTables {
 				} else if (!c.name().endsWith(GroupOfColumns.GRAPH)) {
 					template.append(((VirtualSingleValueColumn) c).value());
 				} else {
-					addGraphs(model, vf, table, c);
+					addGraphs(model, vf, subjectMap, c);
 				}
 			}
 			if (allVirtual) {
-				model.add(vf.createStatement(table, R2RML.clazz, vf.createIRI(template.toString())));
+				model.add(vf.createStatement(subjectMap, R2RML.clazz, vf.createIRI(template.toString())));
 				return;
 			}
 		}
