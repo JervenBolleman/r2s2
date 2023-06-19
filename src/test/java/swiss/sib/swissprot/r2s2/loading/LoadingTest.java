@@ -4,6 +4,7 @@ import static org.junit.Assert.fail;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -11,7 +12,6 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -71,7 +71,7 @@ public class LoadingTest {
 		loader.runStep(4);
 		writeR2RML(loader.tables());
 
-		try (Connection conn = open(loader.connectionString())) {
+		try (Connection conn = openByJdbc(loader.connectionString())) {
 			validateRdfMerged(conn);
 		}
 	}
@@ -152,7 +152,7 @@ public class LoadingTest {
 	}
 
 	private void validateRdfTypeStatementsLoaded(Loader loader) throws SQLException {
-		try (Connection conn_rw = open(loader.connectionString())) {
+		try (Connection conn_rw = openByJdbc(loader.connectionString())) {
 			for (Table t : loader.tables()) {
 				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
 					try (java.sql.Statement count = conn_rw.createStatement();
@@ -172,9 +172,5 @@ public class LoadingTest {
 				}
 			}
 		}
-	}
-
-	public Connection open(String newFolder) throws SQLException {
-		return DriverManager.getConnection("jdbc:duckdb:" + newFolder);
 	}
 }
