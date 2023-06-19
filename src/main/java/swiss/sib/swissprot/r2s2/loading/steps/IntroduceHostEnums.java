@@ -1,6 +1,6 @@
 package swiss.sib.swissprot.r2s2.loading.steps;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
@@ -21,12 +21,12 @@ import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
-public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
+public record IntroduceHostEnums(String temp, List<Table> tables) {
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceHostEnums.class);
 
 	public void run() {
-		try (Connection conn_rw = open(temp)) {
+		try (Connection conn_rw = openByJdbc(temp)) {
 
 			Set<String> hosts = tables.stream().flatMap(table -> collectHostParts(conn_rw, table))
 					.collect(Collectors.toSet());
@@ -63,7 +63,7 @@ public record IntroduceHostEnums(String temp, List<Table> tables, TemporaryIriId
 						+ SqlDatatype.HOST.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
-				DuckDBUtil.commitIfNeeded(conn_rw);
+				JdbcUtil.commitIfNeeded(conn_rw);
 				hostColumn.setDatatype(SqlDatatype.HOST);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);

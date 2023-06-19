@@ -15,7 +15,7 @@ import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
@@ -116,7 +116,7 @@ public class RdfTypeSplitting {
 		log.info("Executing " + in);
 		try (Statement update = conn.createStatement()) {
 			update.executeUpdate(in);
-			DuckDBUtil.commitIfNeeded(conn);
+			JdbcUtil.commitIfNeeded(conn);
 		}
 	}
 

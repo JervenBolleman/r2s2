@@ -9,7 +9,7 @@ import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
@@ -50,7 +50,7 @@ public class OptimizeForDatatype {
 		try (Statement stat = conn.createStatement()) {
 			logger.info("RUNNING " + sql);
 			stat.execute(sql);
-			DuckDBUtil.commitIfNeeded(conn);
+			JdbcUtil.commitIfNeeded(conn);
 			c.setDatatype(dt);
 		} catch (SQLException e) {
 			logger.info(

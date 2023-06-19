@@ -63,7 +63,7 @@ public class R2RMLFromTables {
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
 		model.add(vf.createStatement(table, RDF.TYPE, R2RML.TriplesMap));
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
-		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral("main."+t.name().toLowerCase())));
+		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(""+t.name().toLowerCase())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
 
 		createTemplate(model, vf, subjectMap, t.subjectKind(), "subject", t.subject());
@@ -78,18 +78,8 @@ public class R2RMLFromTables {
 		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
 		Resource objectMap = vf.createBNode();// "objectMap_" + name());
 		if (p.predicate().equals(RDF.TYPE)) {
-			boolean allVirtual = true;
 			StringBuilder template = new StringBuilder();
-
-			for (Column c : p.groupOfColumns().columns()) {
-				if (!c.isVirtual()) {
-					allVirtual = false;
-				} else if (!c.name().endsWith(GroupOfColumns.GRAPH)) {
-					template.append(((VirtualSingleValueColumn) c).value());
-				} else {
-					addGraphs(model, vf, subjectMap, c);
-				}
-			}
+			boolean allVirtual = seeIfR2RMLClassIsAppropiate(model, vf, p, subjectMap, template);
 			if (allVirtual) {
 				model.add(vf.createStatement(subjectMap, R2RML.clazz, vf.createIRI(template.toString())));
 				return;
@@ -103,11 +93,27 @@ public class R2RMLFromTables {
 
 	}
 
+	public static boolean seeIfR2RMLClassIsAppropiate(Model model, SimpleValueFactory vf, PredicateMap p,
+			Resource subjectMap, StringBuilder template) {
+		boolean allVirtual = true;
+
+		for (Column c : p.groupOfColumns().columns()) {
+			if (!c.isVirtual()) {
+				allVirtual = false;
+			} else if (notTheGraphColumn(c)) {
+				template.append(((VirtualSingleValueColumn) c).value());
+			} else {
+				addGraphs(model, vf, subjectMap, c);
+			}
+		}
+		return allVirtual;
+	}
+
 	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, GroupOfColumns c) {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
 			for (Column column : c.columns()) {
-				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
+				if (notTheGraphColumn(column)) {
 					if (column.name().endsWith(GroupOfColumns.DATATYPE)) {
 						columnDefinition(model, vf, R2RML.datatype, map, column, vf::createIRI);
 					} else if (column.name().endsWith(GroupOfColumns.LANG)) {
@@ -124,7 +130,7 @@ public class R2RMLFromTables {
 		} else if (k == Kind.IRI) {
 			StringBuilder template = new StringBuilder();
 			for (Column column : c.columns()) {
-				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
+				if (notTheGraphColumn(column)) {
 					if (column.isVirtual()) {
 						template.append(((VirtualSingleValueColumn) column).value());
 					} else {
@@ -137,7 +143,7 @@ public class R2RMLFromTables {
 			model.add(map, R2RML.template, vf.createLiteral(template.toString()));
 		} else if (k == Kind.BNODE) {
 			for (Column column : c.columns()) {
-				if (!column.name().endsWith(GroupOfColumns.GRAPH)) {
+				if (notTheGraphColumn(column)) {
 					if (column.isPhysical()) {
 						model.add(map, R2RML.column, vf.createLiteral(column.name()));
 					} else {
@@ -148,6 +154,10 @@ public class R2RMLFromTables {
 				}
 			}
 		}
+	}
+
+	public static boolean notTheGraphColumn(Column column) {
+		return !column.name().endsWith(GroupOfColumns.GRAPH);
 	}
 
 	public static void addGraphs(Model model, SimpleValueFactory vf, Resource map, Column column) {

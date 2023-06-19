@@ -1,6 +1,6 @@
 package swiss.sib.swissprot.r2s2.loading.steps;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -13,20 +13,19 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
-import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
-public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryIriIdMap temporaryGraphIdMap) {
+public record IntroduceProtocolEnums(String temp, List<Table> tables) {
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceProtocolEnums.class);
 
 	public void run() {
-		try (Connection conn_rw = open(temp)) {
+		try (Connection conn_rw = openByJdbc(temp)) {
 			Set<String> protocols = tables.stream().flatMap(table -> collectProtocolParts(conn_rw, table))
 					.collect(Collectors.toSet());
 			//Can be the case if all are virtual
@@ -64,7 +63,7 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables, TemporaryI
 						+ SqlDatatype.PROTOCOL.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
-				DuckDBUtil.commitIfNeeded(conn_rw);
+				JdbcUtil.commitIfNeeded(conn_rw);
 				protocolColumn.setDatatype(SqlDatatype.PROTOCOL);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);

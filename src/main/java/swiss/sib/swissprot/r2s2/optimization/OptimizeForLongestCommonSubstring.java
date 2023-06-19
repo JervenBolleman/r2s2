@@ -9,7 +9,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
@@ -46,7 +46,7 @@ public class OptimizeForLongestCommonSubstring {
 							log.warn(uc);
 
 							ct.executeUpdate(uc);
-							DuckDBUtil.commitIfNeeded(conn);
+							JdbcUtil.commitIfNeeded(conn);
 						}
 					}
 				} catch (SQLException e) {
@@ -61,7 +61,7 @@ public class OptimizeForLongestCommonSubstring {
 		if (!column.isVirtual() && SqlDatatype.TEXT == column.sqlDatatype()) {
 			try (Statement ct = conn.createStatement()) {
 				String dc = "SELECT " + column.name() + " FROM " + table.name() + " WHERE " + column.name()
-						+ " NOT NULL";
+						+ " IS NOT NULL";
 				log.info("Running " + dc);
 				try (ResultSet executeQuery = ct.executeQuery(dc)) {
 					boolean first = executeQuery.next();

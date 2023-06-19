@@ -1,7 +1,7 @@
 package swiss.sib.swissprot.r2s2.loading.steps;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.checkpoint;
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.checkpoint;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -29,7 +29,7 @@ public record OptimizeForR2RML(String dbPath, List<Table> tables, Map<String, St
 	public List<Table> run() {
 		logger.info("Starting to optimize for r2rml");
 		List<Table> tables = tables();
-		try (Connection conn = open(dbPath)) {
+		try (Connection conn = openByJdbc(dbPath)) {
 			tables = RdfTypeSplitting.split(conn, tables, namespaces);
 			checkpoint(conn);
 		} catch (SQLException e) {
@@ -37,7 +37,7 @@ public record OptimizeForR2RML(String dbPath, List<Table> tables, Map<String, St
 		}
 		for (Table table : tables) {
 			for (BiConsumer<Connection, Table> optimizer : OPTIMIZERS) {
-				try (Connection conn = open(dbPath)) {
+				try (Connection conn = openByJdbc(dbPath)) {
 					optimizer.accept(conn, table);
 					checkpoint(conn);
 				} catch (SQLException e) {

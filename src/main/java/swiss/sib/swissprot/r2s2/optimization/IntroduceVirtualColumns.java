@@ -9,7 +9,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -61,14 +61,14 @@ public class IntroduceVirtualColumns {
 			String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
 			log.info("dropping: " + table.name() + "." + column.name());
 			ct2.execute(dropColumn);
-			DuckDBUtil.commitIfNeeded(conn);
+			JdbcUtil.commitIfNeeded(conn);
 		} catch (SQLException e) {
 			// Last column can not be dropped. So we just delete all values.
 			try (Statement ct3 = conn.createStatement()) {
 				final String emptyTable = "DELETE FROM " + table.name();
 				log.info("emptying: " + table.name() + " " + emptyTable);
 				ct3.execute(emptyTable);
-				DuckDBUtil.commitIfNeeded(conn);
+				JdbcUtil.commitIfNeeded(conn);
 			}
 		}
 	}

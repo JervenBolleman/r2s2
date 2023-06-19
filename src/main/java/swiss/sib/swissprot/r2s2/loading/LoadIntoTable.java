@@ -12,12 +12,15 @@ package swiss.sib.swissprot.r2s2.loading;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.duckdb.DuckDBAppender;
 import org.duckdb.DuckDBConnection;
@@ -45,19 +48,124 @@ public final class LoadIntoTable implements AutoCloseable {
 	private final Kind objectKind;
 	private final IRI datatype;
 	private final String lang;
-	private final DuckDBConnection conn;
 	private final TemporaryIriIdMap tgid;
 
 	private volatile boolean closed = false;
 	private final IRI predicate;
 	private final Table table;
-	private final DuckDBAppender appender;
+	private final Inserter inserter;
 	private volatile int c = 1;
 	private final Lock lock = new ReentrantLock();
+	private final Connection conn;
+
+	private interface Inserter {
+		public void add(Resource subjectS, Value objectS, int tempGraphId) throws SQLException;
+
+		public void close() throws SQLException;
+	}
+
+	private record JdbcInserter(Connection conn, String sqlTemplate) implements Inserter {
+		public JdbcInserter(Connection conn, String name, GroupOfColumns subjectColumns, GroupOfColumns objectColumns) {
+			this(conn, "insert into "+name +'('+Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream()).map(Column::name).collect(Collectors.joining(", "))+") values ("+Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream()).map(c -> "?").collect(Collectors.joining(", "))+")");
+		}
+
+		public void add(Resource subjectS, Value objectS, int tempGraphId) throws SQLException {
+			try (PreparedStatement stat = conn.prepareStatement(sqlTemplate)) {
+				int offset = add(subjectS, stat, 0);
+				offset = add(objectS, stat, offset);
+				stat.setInt(++offset, tempGraphId);
+				stat.executeUpdate();
+			}
+		}
+
+		public void close() throws SQLException {
+
+		}
+		
+		private int add(Value subjectS, PreparedStatement stat, int index) throws SQLException {
+			if (subjectS.isIRI()) {
+				String i = subjectS.stringValue();
+				String protocol = i.substring(0, i.indexOf("://") + 3);
+				String host = i.substring(protocol.length(), i.indexOf('/', protocol.length()));
+				String q = i.substring(protocol.length() + host.length());
+				stat.setString(++index, protocol);
+				stat.setString(++index, host);
+				stat.setString(++index, q);
+			} else if (subjectS.isBNode()) {
+				long i = ((LoaderBlankNode) subjectS).id();
+				stat.setLong(++index, i);
+			} else if (subjectS.isLiteral()) {
+				Literal l = (Literal) subjectS;
+				if (l.getLanguage().isPresent()) {
+					stat.setString(++index, l.getLanguage().get());
+				} else {
+					IRI datatype = l.getDatatype();
+					stat.setString(++index, datatype.stringValue());
+				}
+				stat.setString(++index, l.stringValue());
+			}
+			return index;
+		}
+	}
+
+	private class DuckDbInserter implements Inserter {
+		private final DuckDBAppender appender;
+		private final DuckDBConnection conn;
+
+		public DuckDbInserter(DuckDBConnection conn) throws SQLException {
+			super();
+			this.conn = conn;
+			this.appender = conn.createAppender("", table.name());
+		}
+
+		public void add(Resource subjectS, Value objectS, int tempGraphId) throws SQLException {
+			appender.beginRow();
+			add(subjectS, appender);
+			add(objectS, appender);
+			appender.append(tempGraphId);
+			appender.endRow();
+			if (c % FLUSH_EVERY_X == 0) {
+				appender.flush();
+				logger.info("Flushed " + table.name() + " now has " + c + " rows");
+			}
+			c++;
+		}
+
+		public void close() throws SQLException {
+			this.appender.close();
+			this.conn.close();
+		}
+
+		private void add(Value subjectS, DuckDBAppender appender) throws SQLException {
+			if (subjectS.isIRI()) {
+				String i = subjectS.stringValue();
+				String protocol = i.substring(0, i.indexOf("://") + 3);
+				String host = i.substring(protocol.length(), i.indexOf('/', protocol.length()));
+				String q = i.substring(protocol.length() + host.length());
+				appender.append(protocol);
+				appender.append(host);
+				appender.append(q);
+			} else if (subjectS.isBNode()) {
+				long i = ((LoaderBlankNode) subjectS).id();
+				appender.append(i);
+			} else if (subjectS.isLiteral()) {
+				Literal l = (Literal) subjectS;
+				if (l.getLanguage().isPresent()) {
+					appender.append(l.getLanguage().get());
+				} else {
+					IRI datatype = l.getDatatype();
+					appender.append(datatype.stringValue());
+				}
+				appender.append(l.stringValue());
+			}
+		}
+
+	}
 
 	public LoadIntoTable(Statement template, Connection masterConn, TemporaryIriIdMap tgid, TempIriId predicate,
 			Map<String, String> namespaces) throws IOException, SQLException {
-		this.conn = (DuckDBConnection) ((DuckDBConnection) masterConn).duplicate();
+
+		this.conn = masterConn;
 		this.tgid = tgid;
 		this.subjectKind = Kind.of(template.getSubject());
 		this.objectKind = Kind.of(template.getObject());
@@ -70,17 +178,24 @@ public final class LoadIntoTable implements AutoCloseable {
 			lang = lit.getLanguage().orElse(null);
 			datatype = lit.getDatatype();
 		}
-		GroupOfColumns subjectColumns = GroupOfColumns.from(subjectKind, lang, datatype, "subject_", namespaces,predicate);
-		GroupOfColumns objectColumns = GroupOfColumns.from(objectKind, lang, datatype, "object_",namespaces, predicate);
-		Column objectGraphColumn = GroupOfColumns.graphColumn(objectKind, lang, datatype, "object_",namespaces, predicate);
+		GroupOfColumns subjectColumns = GroupOfColumns.from(subjectKind, lang, datatype, "subject_", namespaces,
+				predicate);
+		GroupOfColumns objectColumns = GroupOfColumns.from(objectKind, lang, datatype, "object_", namespaces,
+				predicate);
+		Column objectGraphColumn = GroupOfColumns.graphColumn(objectKind, lang, datatype, "object_", namespaces,
+				predicate);
 		objectColumns.columns().add(objectGraphColumn);
 		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
 		this.table = makeTable(predicate, subjectColumns, objectColumns, tableName);
+		if (masterConn instanceof DuckDBConnection) {
+			this.inserter = new DuckDbInserter((DuckDBConnection) ((DuckDBConnection) masterConn).duplicate());
+		} else {
+			this.inserter = new JdbcInserter(masterConn, this.table.name(), subjectColumns, objectColumns);
+		}
 
-		this.appender = conn.createAppender("", table.name());
 	}
 
-	public Table makeTable(TempIriId predicate, GroupOfColumns subjectColumns, GroupOfColumns objectColumns, 
+	public Table makeTable(TempIriId predicate, GroupOfColumns subjectColumns, GroupOfColumns objectColumns,
 			final String tableName) throws SQLException {
 		Table table;
 		try {
@@ -88,23 +203,21 @@ public final class LoadIntoTable implements AutoCloseable {
 				PredicateMap pm = new PredicateMap(predicate, objectColumns, objectKind, lang, datatype);
 				table = new Table(tableName, subjectColumns, subjectKind, List.of(pm));
 			} else
-				table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind,  lang,
-						datatype);
+				table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, lang, datatype);
 			table.create(conn);
 		} catch (SQLException e) {
 			// Can happen if the table name is not valid.
-			table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, lang,
-					datatype);
+			table = new Table(predicate, subjectColumns, subjectKind, objectColumns, objectKind, lang, datatype);
 			table.create(conn);
 		}
 		return table;
 	}
 
-	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind subjectKind, Kind objectKind2, String lang2,
-			IRI datatype2) {
-		
+	private static String tableName(TempIriId predicate, Map<String, String> namespaces, Kind subjectKind,
+			Kind objectKind2, String lang2, IRI datatype2) {
+
 		final String preName = Naming.iriToSqlNamePart(namespaces, predicate);
-		if(preName != null) {
+		if (preName != null) {
 			return Table.generateName(preName, subjectKind, objectKind2, lang2, datatype2);
 		} else {
 			return null;
@@ -114,10 +227,9 @@ public final class LoadIntoTable implements AutoCloseable {
 	@Override
 	public void close() throws SQLException {
 		if (!closed) {
-			this.appender.close();
-			logger.info("Closed " + table.name() + " now has " + c + " rows");
-			this.conn.close();
+			this.inserter.close();
 		}
+		logger.info("Closed " + table.name() + " now has " + c + " rows");
 		closed = true;
 	}
 
@@ -194,15 +306,7 @@ public final class LoadIntoTable implements AutoCloseable {
 	private void write(Resource subjectS, Value objectS, int tempGraphId) throws SQLException {
 		try {
 			lock.lock();
-			appender.beginRow();
-			table.subject().add(subjectS, appender);
-			table.objects().get(0).groupOfColumns().add(objectS, tempGraphId, appender);
-			appender.endRow();
-			if (c % FLUSH_EVERY_X == 0) {
-				appender.flush();
-				logger.info("Flushed " + table.name() + " now has " + c + " rows");
-			}
-			c++;
+			inserter.add(subjectS, objectS, tempGraphId);
 		} finally {
 			lock.unlock();
 		}

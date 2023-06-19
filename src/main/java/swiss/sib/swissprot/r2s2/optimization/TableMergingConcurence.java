@@ -1,6 +1,6 @@
 package swiss.sib.swissprot.r2s2.optimization;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -17,11 +17,12 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.duckdb.DuckDBConnection;
 import org.eclipse.rdf4j.model.IRI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.Table;
@@ -41,6 +42,19 @@ public class TableMergingConcurence {
 	}
 
 	public List<Table> run() {
+		try (Connection conn = openByJdbc(path)){
+			if (conn instanceof DuckDBConnection) {
+				runMerges();			
+			} else {
+				logger.warn("Table merging is only supported on DuckDB");
+			}
+		} catch (SQLException e) {
+			throw new IllegalStateException();
+		}
+		return tables;
+	}
+
+	public void runMerges() {
 		logger.info("Starting merging tables");
 		List<Table> mergeCandidates = tables.stream().filter(Predicate.not(this::hasDistinctSubjects))
 				.sorted((a, b) -> compareTablesFirstTypeThenSize(a, b)).collect(Collectors.toList());
@@ -60,7 +74,6 @@ public class TableMergingConcurence {
 		}
 		removeEmpty(tables);
 		logger.info("Finished merging tables");
-		return tables;
 	}
 
 	/**
@@ -89,7 +102,7 @@ public class TableMergingConcurence {
 		while (ti.hasNext()) {
 			Table t = ti.next();
 			if (isTableEmpty(t) && !allColumnsVirtual(t)) {
-				try (Connection conn = open(path); var stat = conn.createStatement()) {
+				try (Connection conn = openByJdbc(path); var stat = conn.createStatement()) {
 					String dropSql = "DROP TABLE " + t.name();
 					logger.info("Running " + dropSql);
 					stat.execute(dropSql);
@@ -125,7 +138,7 @@ public class TableMergingConcurence {
 			String sql = "SELECT COUNT(*) FROM " + t.name() + "";
 			logger.info("Running " + sql);
 			long size = 0;
-			try (Connection conn = open(path);
+			try (Connection conn = openByJdbc(path);
 					var stat = conn.createStatement();
 					ResultSet rs = stat.executeQuery(sql)) {
 				rs.next();
@@ -144,7 +157,7 @@ public class TableMergingConcurence {
 		logger.info("Merging " + other.name() + " into " + mc.name());
 		for (PredicateMap pm : other.objects()) {
 			List<Column> toMerge = new ArrayList<>();
-			try (Connection conn = open(path); var stat = conn.createStatement()) {
+			try (Connection conn = openByJdbc(path); var stat = conn.createStatement()) {
 				for (Column oc : pm.groupOfColumns().columns()) {
 					if (oc.isPhysical()) {
 						String alter = "ALTER TABLE " + mc.name() + " ADD COLUMN " + oc.definition();
@@ -170,16 +183,15 @@ public class TableMergingConcurence {
 		String update = "UPDATE " + mc.name() + " SET "
 				+ toMerge.stream().map(oc -> "" + oc.name() + " = oc." + oc.name()).collect(Collectors.joining(" , "))
 				+ " FROM " + other.name() + " oc WHERE " + concatSubjectColumns(mc, "") + '=' + osc;
-
+		logger.info(update);
+		stat.execute(update);
+		JdbcUtil.commitIfNeeded(conn);
 		String delete = "DELETE FROM " + other.name() + " oc USING " + mc.name() + " mc WHERE " + msc + '=' + osc + " AND "
 				+ toMerge.stream().map(oc -> "mc." + oc.name() + " = oc." + oc.name()).collect(Collectors.joining(" AND "));
 
-		logger.info(update);
-		stat.execute(update);
-		DuckDBUtil.commitIfNeeded(conn);
 		logger.info(delete);
 		stat.execute(delete);
-		DuckDBUtil.commitIfNeeded(conn);
+		JdbcUtil.commitIfNeeded(conn);
 		mc.objects().add(pm);
 		size(other, true);
 	}
@@ -191,7 +203,7 @@ public class TableMergingConcurence {
 		final Stream<IRI> filter = mcPredicates.stream().filter(otherPredicates::contains);
 		final boolean samePredicate = filter.findAny().isPresent();
 		if (other != mc && sameSubjectKind && !samePredicate && !mergedTables.contains(other) && !isTableEmpty(other)) {
-			try (Connection conn = open(path); Statement statement = conn.createStatement()) {
+			try (Connection conn = openByJdbc(path); Statement statement = conn.createStatement()) {
 				String msc = concatSubjectColumns(mc, "mc");
 				String osc = concatSubjectColumns(other, "oc");
 				String sql = "SELECT COUNT(*) FROM " + mc.name() + " mc , " + other.name() + " oc WHERE " + msc + '='
@@ -235,7 +247,7 @@ public class TableMergingConcurence {
 		if (sc.isEmpty()) {
 			return false;
 		}
-		try (Connection conn = open(path); Statement statement = conn.createStatement()) {
+		try (Connection conn = openByJdbc(path); Statement statement = conn.createStatement()) {
 			String sql = "SELECT " + sc + " FROM " + t.name() + " GROUP BY " + sc + " HAVING (COUNT(*) > 1) LIMIT 1";
 			logger.info("Running " + sql);
 			try (ResultSet rs = statement.executeQuery(sql)) {

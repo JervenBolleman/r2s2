@@ -71,7 +71,7 @@ public class LoadingTest {
 		loader.runStep(4);
 		writeR2RML(loader.tables());
 
-		try (Connection conn = open(loader.tempPath())) {
+		try (Connection conn = open(loader.connectionString())) {
 			validateRdfMerged(conn);
 		}
 	}
@@ -152,7 +152,7 @@ public class LoadingTest {
 	}
 
 	private void validateRdfTypeStatementsLoaded(Loader loader) throws SQLException {
-		try (Connection conn_rw = open(loader.tempPath())) {
+		try (Connection conn_rw = open(loader.connectionString())) {
 			for (Table t : loader.tables()) {
 				if (t.objects().get(0).predicate().equals(RDF.TYPE)) {
 					try (java.sql.Statement count = conn_rw.createStatement();

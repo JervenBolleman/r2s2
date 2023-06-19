@@ -10,6 +10,7 @@
 		<slf4j.version>[1.7,)</slf4j.version>
 		<ontop.version>5.0.1</ontop.version>
 		<duckdb.version>[0.8,)</duckdb.version>
+		<h2.version>2.1.214</h2.version>
 		<maven.compiler.release>17</maven.compiler.release>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
@@ -109,6 +110,11 @@
 			<version>${duckdb.version}</version>
 		</dependency>
 		<dependency>
+		    <groupId>com.h2database</groupId>
+		    <artifactId>h2</artifactId>
+		    <version>${h2.version}</version>
+		</dependency>
+		<dependency>
 			<groupId>it.unibz.inf.ontop</groupId>
 			<artifactId>ontop-rdf4j</artifactId>
 			<version>${ontop.version}</version>
@@ -150,8 +156,15 @@
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-engine</artifactId>
 			<scope>test</scope>
-			<version>5.9.1</version>
+			<version>5.9.2</version>
 		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-params</artifactId>
+			<version>5.9.2</version>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 	<build>
 		<plugins>

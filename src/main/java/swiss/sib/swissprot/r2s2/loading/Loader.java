@@ -10,7 +10,7 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,11 +35,12 @@ import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceHostEnums;
+import swiss.sib.swissprot.r2s2.loading.steps.IntroduceIndexes;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceProtocolEnums;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.ReOptimizeForR2RML;
-import swiss.sib.swissprot.r2s2.loading.steps.Vacuum;
+import swiss.sib.swissprot.r2s2.loading.steps.PoorMansVacuum;
 import swiss.sib.swissprot.r2s2.optimization.IntroduceVirtualColumns;
 import swiss.sib.swissprot.r2s2.optimization.TableMergingConcurence;
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
@@ -53,7 +54,8 @@ public class Loader {
 	static final char fieldSep = '\t';
 
 	public static final long NOT_FOUND = -404;
-	private final File duckDbFile;
+	private final File dbFile;
+	private final String jdbc;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen = new TemporaryIriIdMap();
 
 	private final Map<String, String> namespaces = new ConcurrentHashMap<>();
@@ -82,12 +84,17 @@ public class Loader {
 	}
 
 	public Loader(File duckDbFile, int step, List<String> lines) {
+		this(duckDbFile, step, lines, "jdbc:duckdb:" + duckDbFile.getAbsolutePath());
+	}
+
+	public Loader(File fileAsPattern, int step, List<String> lines, String driver) {
 		super();
-		this.duckDbFile = duckDbFile;
+		this.dbFile = fileAsPattern;
 		this.step = step;
 		this.lines = lines;
-		if (!duckDbFile.exists()) {
-			duckDbFile.getParentFile().mkdirs();
+		this.jdbc = driver;
+		if (!fileAsPattern.exists()) {
+			fileAsPattern.getParentFile().mkdirs();
 		}
 		namespaces.putIfAbsent("up", "http://purl.uniprot.org/core/");
 		namespaces.putIfAbsent(RDF.PREFIX, RDF.NAMESPACE);
@@ -121,34 +128,39 @@ public class Loader {
 		return wo;
 	}
 
-	public String tempPath() {
-		return duckDbFile.getAbsolutePath() + ".loading-tmp";
+	public String connectionString() {
+		if (jdbc.startsWith("jdbc:duckdb:")){
+			return "jdbc:duckdb:"+ dbFile.getAbsolutePath();
+		} else {
+			return jdbc;
+		}
 	}
 
 	public File descriptionPath() {
-		final File p = duckDbFile.getParentFile();
-		final String fn = duckDbFile.getName();
+		final File p = dbFile.getParentFile();
+		final String fn = dbFile.getName();
 		return new File(p, fn + "-description.ttl");
 	}
 
 	public File r2rmlPath() {
-		final File p = duckDbFile.getParentFile();
-		final String fn = duckDbFile.getName();
+		final File p = dbFile.getParentFile();
+		final String fn = dbFile.getName();
 		return new File(p, fn + "-r2rml.ttl");
 	}
 
 	private static final List<Consumer<Loader>> STEPS = List.of(Loader::parseOrReloadState,
-			l -> new IntroduceGraphEnum(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
-			l -> l.tables = new OptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), Loader::writeR2RML,
-			l -> l.tables = new TableMergingConcurence(l.tempPath(), l.tables).run(), Loader::writeR2RML,
-			l -> l.tables = new ReOptimizeForR2RML(l.tempPath(), l.tables, l.namespaces).run(), Loader::writeR2RML,
-			l -> new IntroduceProtocolEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
-			l -> new IntroduceHostEnums(l.tempPath(), l.tables, l.temporaryGraphIdMap).run(),
-			l -> new Vacuum(l.tempPath(), l.duckDbFile.getAbsolutePath()).run());
+			l -> new IntroduceGraphEnum(l.connectionString(), l.tables, l.temporaryGraphIdMap).run(),
+			l -> l.tables = new OptimizeForR2RML(l.connectionString(), l.tables, l.namespaces).run(), Loader::writeR2RML,
+			l -> l.tables = new TableMergingConcurence(l.connectionString(), l.tables).run(), Loader::writeR2RML,
+			l -> l.tables = new ReOptimizeForR2RML(l.connectionString(), l.tables, l.namespaces).run(), Loader::writeR2RML,
+			l -> new IntroduceProtocolEnums(l.connectionString(), l.tables).run(),
+			l -> new IntroduceHostEnums(l.connectionString(), l.tables).run(),
+			l -> new IntroduceIndexes(l.connectionString(), l.tables).run(),
+			l -> new PoorMansVacuum(l.connectionString(), l.dbFile).run());
 
 	public static void introduceVirtualColumns(Loader l) {
 		for (Table t : l.tables) {
-			try (Connection conn = open(l.tempPath())) {
+			try (Connection conn = openByJdbc(l.connectionString())) {
 				IntroduceVirtualColumns.optimize(conn, t);
 			} catch (SQLException e) {
 				throw new IllegalArgumentException(e);
@@ -158,11 +170,11 @@ public class Loader {
 
 	public static void parseOrReloadState(Loader l) {
 		try {
-			logger.info("Testing if "+l.descriptionPath() + " exists");
+			logger.info("Testing if " + l.descriptionPath() + " exists");
 			if (l.descriptionPath().exists()) {
 				l.tables = TableDescriptionAsRdf.read(l.descriptionPath());
 			} else {
-				l.tables = new ParseIntoSOGTables(l.tempPath(), l.lines, l.predicatesInOrderOfSeen,
+				l.tables = new ParseIntoSOGTables(l.connectionString(), l.lines, l.predicatesInOrderOfSeen,
 						l.temporaryGraphIdMap, l.namespaces).run();
 			}
 		} catch (IOException e) {

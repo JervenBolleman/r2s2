@@ -1,7 +1,7 @@
 package swiss.sib.swissprot.r2s2.loading.steps;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.checkpoint;
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.checkpoint;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 import static swiss.sib.swissprot.r2s2.loading.ExternalProcessHelper.waitForProcessToBeDone;
 
 import java.io.BufferedInputStream;
@@ -33,7 +33,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.duckdb.DuckDBConnection;
 import org.eclipse.rdf4j.common.exception.RDF4JException;
 import org.eclipse.rdf4j.model.BNode;
 import org.eclipse.rdf4j.model.IRI;
@@ -65,7 +64,7 @@ public class ParseIntoSOGTables {
 
 	private static final AtomicLong BNODE_ID_NORMALIZER = new AtomicLong();
 	private final Map<Integer, PredicateDirectoryWriter> predicatesDirectories = new ConcurrentHashMap<>();
-	private final String tempPath;
+	private final String jdbc;
 	private final List<String> lines;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen;
 	private final TemporaryIriIdMap temporaryGraphIdMap;
@@ -82,9 +81,9 @@ public class ParseIntoSOGTables {
 
 	private final Map<String, String> namespaces;
 
-	public ParseIntoSOGTables(String tempPath, List<String> lines, TemporaryIriIdMap predicatesInOrderOfSeen,
+	public ParseIntoSOGTables(String jdbc, List<String> lines, TemporaryIriIdMap predicatesInOrderOfSeen,
 			TemporaryIriIdMap temporaryGraphIdMap, Map<String, String> namespaces) {
-		this.tempPath = tempPath;
+		this.jdbc = jdbc;
 		this.lines = lines;
 		this.predicatesInOrderOfSeen = predicatesInOrderOfSeen;
 		this.temporaryGraphIdMap = temporaryGraphIdMap;
@@ -99,7 +98,7 @@ public class ParseIntoSOGTables {
 	private static final Logger logger = LoggerFactory.getLogger(ParseIntoSOGTables.class);
 
 	public List<Table> run() throws IOException {
-		try (Connection conn_rw = open(tempPath)) {
+		try (Connection conn_rw = openByJdbc(jdbc)) {
 			Instant start = Instant.now();
 			logger.info("Starting step parsing files into SOG tables, named by predicate");
 			List<Future<SQLException>> closers = new ArrayList<>();
@@ -454,20 +453,18 @@ public class ParseIntoSOGTables {
 	}
 
 	private void tempIriIdMapIntoTable(Connection conn_rw, String tableName, TemporaryIriIdMap m) throws SQLException {
-		try (Connection conn_w_pred = ((DuckDBConnection) conn_rw).duplicate()) {
-			try (java.sql.Statement ct = conn_w_pred.createStatement()) {
-				ct.execute("CREATE OR REPLACE TABLE " + tableName + " (id INT PRIMARY KEY, iri VARCHAR)");
-			}
+		try (java.sql.Statement ct = conn_rw.createStatement()) {
+			ct.execute("CREATE OR REPLACE TABLE " + tableName + " (id INT PRIMARY KEY, iri VARCHAR)");
+		}
 
-			for (TempIriId predicateI : m.iris()) {
-				try (PreparedStatement prepareStatement = conn_w_pred
-						.prepareStatement("INSERT INTO " + tableName + " VALUES (?, ?);")) {
-					String predicateS = predicateI.stringValue();
-					prepareStatement.setInt(1, predicateI.id());
-					logger.info("Writing into " + tableName + " id:" + predicateI.id() + " iri:" + predicateS);
-					prepareStatement.setString(2, predicateS);
-					prepareStatement.execute();
-				}
+		for (TempIriId predicateI : m.iris()) {
+			try (PreparedStatement prepareStatement = conn_rw
+					.prepareStatement("INSERT INTO " + tableName + " VALUES (?, ?)")) {
+				String predicateS = predicateI.stringValue();
+				prepareStatement.setInt(1, predicateI.id());
+				logger.info("Writing into " + tableName + " id:" + predicateI.id() + " iri:" + predicateS);
+				prepareStatement.setString(2, predicateS);
+				prepareStatement.execute();
 			}
 		}
 	}

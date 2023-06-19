@@ -1,19 +1,14 @@
 package swiss.sib.swissprot.r2s2.sql;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
-import org.duckdb.DuckDBAppender;
 import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Literal;
-import org.eclipse.rdf4j.model.Value;
 
 import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
-import swiss.sib.swissprot.r2s2.loading.LoaderBlankNode;
 
 public record GroupOfColumns(List<Column> columns) {
 	public static final String DATATYPE = "_datatype";
@@ -85,35 +80,6 @@ public record GroupOfColumns(List<Column> columns) {
 		default:
 			throw new UnsupportedOperationException();
 		}
-	}
-
-	public void add(Value subjectS, DuckDBAppender appender) throws SQLException {
-		if (subjectS.isIRI()) {
-			String i = subjectS.stringValue();
-			String protocol = i.substring(0, i.indexOf("://") + 3);
-			String host = i.substring(protocol.length(), i.indexOf('/', protocol.length()));
-			String q = i.substring(protocol.length() + host.length());
-			appender.append(protocol);
-			appender.append(host);
-			appender.append(q);
-		} else if (subjectS.isBNode()) {
-			long i = ((LoaderBlankNode) subjectS).id();
-			appender.append(i);
-		} else if (subjectS.isLiteral()) {
-			Literal l = (Literal) subjectS;
-			if (l.getLanguage().isPresent()) {
-				appender.append(l.getLanguage().get());
-			} else {
-				IRI datatype = l.getDatatype();
-				appender.append(datatype.stringValue());
-			}
-			appender.append(l.stringValue());
-		}
-	}
-
-	public void add(Value v, int tempGraphId, DuckDBAppender appender) throws SQLException {
-		add(v, appender);
-		appender.append(tempGraphId);
 	}
 
 	public Optional<Column> getColumn(String name) {

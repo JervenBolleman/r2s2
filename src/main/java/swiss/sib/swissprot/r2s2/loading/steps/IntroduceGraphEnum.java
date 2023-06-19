@@ -1,6 +1,6 @@
 package swiss.sib.swissprot.r2s2.loading.steps;
 
-import static swiss.sib.swissprot.r2s2.DuckDBUtil.open;
+import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -11,7 +11,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import swiss.sib.swissprot.r2s2.DuckDBUtil;
+import swiss.sib.swissprot.r2s2.JdbcUtil;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap;
 import swiss.sib.swissprot.r2s2.loading.TemporaryIriIdMap.TempIriId;
 import swiss.sib.swissprot.r2s2.sql.Column;
@@ -24,7 +24,7 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 
 	private static final Logger logger = LoggerFactory.getLogger(IntroduceGraphEnum.class);
 	public void run() {
-		try (Connection conn_rw = open(temp)) {
+		try (Connection conn_rw = openByJdbc(temp)) {
 
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				stat.execute("CREATE TYPE " + SqlDatatype.GRAPH_IRIS.label()
@@ -56,7 +56,7 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 					+ " TYPE graph_iris USING (" + asCase + ")";
 			logger.info("casting " + cast);
 			stat.execute(cast);
-			DuckDBUtil.commitIfNeeded(conn_rw);
+			JdbcUtil.commitIfNeeded(conn_rw);
 		} catch (SQLException e) {
 			throw new IllegalStateException(e);
 		}
