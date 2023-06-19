@@ -92,9 +92,9 @@ public class SparqlOnLoadedTest {
 			}
 			
 			try (ResultSet rs = statement
-					.executeQuery("SELECT * FROM type_rdf_Bag")) {
+					.executeQuery("SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'type%'")) {
 				while (rs.next()) {
-					System.out.println(rs.getString(1) + '\t' + rs.getString(2));
+					System.out.println("tables "+rs.getString(1) + '\t');
 				}
 			}
 

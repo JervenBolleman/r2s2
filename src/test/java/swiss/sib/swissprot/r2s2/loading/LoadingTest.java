@@ -26,17 +26,16 @@ import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.RDFWriterFactory;
 import org.eclipse.rdf4j.rio.RDFWriterRegistry;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
 public class LoadingTest {
 
-	@Rule
-	public TemporaryFolder temp = new TemporaryFolder();
+	@TempDir
+	public File temp;
 	private static final SimpleValueFactory vf = SimpleValueFactory.getInstance();
 	
 	public static final List<Statement> statements = List.of(vf.createStatement(RDF.BAG, RDF.TYPE, RDF.ALT),
@@ -54,9 +53,9 @@ public class LoadingTest {
 			vf.createStatement(RDF.ALT, RDFS.LABEL, vf.createBNode("1")));
 	@Test
 	public void simpleTest() throws IOException, SQLException {
-		File newFolder = temp.newFile("f");
+		File newFolder = new File(temp, "f");
 		newFolder.delete();
-		File input = temp.newFile("input.rdf");
+		File input = new File(temp,"input.rdf");
 		writeTestData(input, statements);
 
 		assertDuckDbAvailable();
