@@ -396,7 +396,7 @@ public class ParseIntoSOGTables {
 	}
 
 	private int estimateParsingProcessors(int procs) {
-		return Math.max(1, procs / 2);
+		return Math.max(1, procs - 1);
 	}
 
 	private static void parse(ParseIntoSOGTables wo, IRI graph, String fileName,

@@ -112,11 +112,11 @@ public class Loader {
 		if (args.length >= 3) {
 			step = Integer.parseInt(args[2]);
 		}
-		try {
-			Class.forName("org.duckdb.DuckDBDriver");
-		} catch (ClassNotFoundException e1) {
-			throw new IllegalStateException(e1);
-		}
+//		try {
+//			Class.forName("org.duckdb.DuckDBDriver");
+//		} catch (ClassNotFoundException e1) {
+//			throw new IllegalStateException(e1);
+//		}
 		parse(directoryToWriteToo, lines, step);
 	}
 
