@@ -63,7 +63,7 @@ public class ParseIntoSOGTables {
 	private static SimpleValueFactory vf = SimpleValueFactory.getInstance();
 
 	private static final AtomicLong BNODE_ID_NORMALIZER = new AtomicLong();
-	private final Map<Integer, PredicateDirectoryWriter> predicatesDirectories = new ConcurrentHashMap<>();
+	private final Map<Integer, PredicateSpecificTableLoaders> predicatesDirectories = new ConcurrentHashMap<>();
 	private final String jdbc;
 	private final List<String> lines;
 	private final TemporaryIriIdMap predicatesInOrderOfSeen;
@@ -115,7 +115,7 @@ public class ParseIntoSOGTables {
 
 		List<Table> l = new ArrayList<>();
 		for (var me : predicatesDirectories.entrySet()) {
-			PredicateDirectoryWriter value = me.getValue();
+			PredicateSpecificTableLoaders value = me.getValue();
 			for (var t : value.getTargets()) {
 				l.add(t.table());
 			}
@@ -161,7 +161,7 @@ public class ParseIntoSOGTables {
 			p.close();
 		}
 		Stream<LoadIntoTable> flatMap = predicatesDirectories.values().stream()
-				.map(PredicateDirectoryWriter::getTargets).flatMap(Collection::stream);
+				.map(PredicateSpecificTableLoaders::getTargets).flatMap(Collection::stream);
 		return flatMap.distinct().map(LoadIntoTable::table).collect(Collectors.toSet());
 	}
 
@@ -206,56 +206,56 @@ public class ParseIntoSOGTables {
 	}
 
 	private LoadIntoTable writeStatement(TemporaryIriIdMap predicatesInOrderOfSeen,
-			Map<Integer, PredicateDirectoryWriter> predicateDirectories, Statement next, LoadIntoTable previous,
+			Map<Integer, PredicateSpecificTableLoaders> predicateDirectories, Statement next, LoadIntoTable previous,
 			Connection conn_rw) throws IOException, SQLException {
-		PredicateDirectoryWriter predicateDirectoryWriter;
+		PredicateSpecificTableLoaders pstl;
 		if (previous != null && previous.testForAcceptance(next)) {
 			previous.write(next);
 			return previous;
 		} else {
 			TempIriId predicate = predicatesInOrderOfSeen.temporaryIriId(next.getPredicate());
 
-			predicateDirectoryWriter = predicateDirectories.get(predicate.id());
-			if (predicateDirectoryWriter == null) {
-				predicateDirectoryWriter = addNewPredicateWriter(predicatesInOrderOfSeen,
+			pstl = predicateDirectories.get(predicate.id());
+			if (pstl == null) {
+				pstl = addNewPredicateWriter(predicatesInOrderOfSeen,
 						predicateDirectories, predicate, conn_rw);
 			}
-			return predicateDirectoryWriter.write(next);
+			return pstl.write(next);
 		}
 	}
 
-	private PredicateDirectoryWriter addNewPredicateWriter(TemporaryIriIdMap predicatesInOrderOfSeen,
-			Map<Integer, PredicateDirectoryWriter> predicateDirectories, TempIriId predicate, Connection conn_rw)
+	private PredicateSpecificTableLoaders addNewPredicateWriter(TemporaryIriIdMap predicatesInOrderOfSeen,
+			Map<Integer, PredicateSpecificTableLoaders> predicateDirectories, TempIriId predicate, Connection conn_rw)
 			throws IOException, SQLException {
-		PredicateDirectoryWriter predicateDirectoryWriter;
+		PredicateSpecificTableLoaders pstl;
 		try {
 			predicateSeenLock.lock();
 
 			int tempPredicateId = predicate.id();
 			if (!predicateDirectories.containsKey(tempPredicateId)) {
-				predicateDirectoryWriter = createPredicateDirectoryWriter(predicateDirectories, predicate,
+				pstl = createPredicateSpecificTableLoaders(predicateDirectories, predicate,
 						temporaryGraphIdMap, conn_rw);
-				predicateDirectories.put(tempPredicateId, predicateDirectoryWriter);
+				predicateDirectories.put(tempPredicateId, pstl);
 			} else {
-				predicateDirectoryWriter = predicateDirectories.get(predicate.id());
+				pstl = predicateDirectories.get(predicate.id());
 			}
 
 		} finally {
 			predicateSeenLock.unlock();
 		}
-		return predicateDirectoryWriter;
+		return pstl;
 	}
 
-	private PredicateDirectoryWriter createPredicateDirectoryWriter(
-			Map<Integer, PredicateDirectoryWriter> predicatesInOrderOfSeen, TempIriId predicate,
+	private PredicateSpecificTableLoaders createPredicateSpecificTableLoaders(
+			Map<Integer, PredicateSpecificTableLoaders> predicatesInOrderOfSeen, TempIriId predicate,
 			TemporaryIriIdMap temporaryGraphIdMap, Connection conn_rw) throws IOException, SQLException {
 
-		PredicateDirectoryWriter predicateDirectoryWriter = new PredicateDirectoryWriter(conn_rw, temporaryGraphIdMap,
+		PredicateSpecificTableLoaders pstl = new PredicateSpecificTableLoaders(conn_rw, temporaryGraphIdMap,
 				predicate, namespaces);
-		return predicateDirectoryWriter;
+		return pstl;
 	}
 
-	static class PredicateDirectoryWriter implements AutoCloseable {
+	static class PredicateSpecificTableLoaders implements AutoCloseable {
 		private final Map<LoadIntoTable.TargetKey, LoadIntoTable> targets = new ConcurrentHashMap<>();
 
 		public Collection<LoadIntoTable> getTargets() {
@@ -268,7 +268,7 @@ public class ParseIntoSOGTables {
 		private final Connection conn_rw;
 		private final Map<String, String> namespaces;
 
-		private PredicateDirectoryWriter(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap, TempIriId predicate,
+		private PredicateSpecificTableLoaders(Connection conn_rw, TemporaryIriIdMap temporaryGraphIdMap, TempIriId predicate,
 				Map<String, String> namespaces) throws IOException, SQLException {
 			this.conn_rw = conn_rw;
 			this.tempraphIdMap = temporaryGraphIdMap;
