@@ -78,9 +78,9 @@ public class R2RMLFromTables {
 		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
 		Resource objectMap = vf.createBNode();// "objectMap_" + name());
 		if (p.predicate().equals(RDF.TYPE)) {
-			StringBuilder template = new StringBuilder();
-			boolean allVirtual = seeIfR2RMLClassIsAppropiate(model, vf, p, subjectMap, template);
-			if (allVirtual) {
+			
+			if (seeIfR2RMLClassIsAppropiate(p)) {
+				StringBuilder template = iriToTemplate(model, vf, subjectMap, p.groupOfColumns());
 				model.add(vf.createStatement(subjectMap, R2RML.clazz, vf.createIRI(template.toString())));
 				return;
 			}
@@ -93,26 +93,19 @@ public class R2RMLFromTables {
 
 	}
 
-	public static boolean seeIfR2RMLClassIsAppropiate(Model model, SimpleValueFactory vf, PredicateMap p,
-			Resource subjectMap, StringBuilder template) {
-		boolean allVirtual = true;
-
+	public static boolean seeIfR2RMLClassIsAppropiate(PredicateMap p) {
 		for (Column c : p.groupOfColumns().columns()) {
 			if (!c.isVirtual()) {
-				allVirtual = false;
-			} else if (notTheGraphColumn(c)) {
-				template.append(((VirtualSingleValueColumn) c).value());
-			} else {
-				addGraphs(model, vf, subjectMap, c);
+				return false;
 			}
 		}
-		return allVirtual;
+		return true;
 	}
 
-	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, GroupOfColumns c) {
+	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, GroupOfColumns gofc) {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
-			for (Column column : c.columns()) {
+			for (Column column : gofc.columns()) {
 				if (notTheGraphColumn(column)) {
 					if (column.name().endsWith(GroupOfColumns.DATATYPE)) {
 						columnDefinition(model, vf, R2RML.datatype, map, column, vf::createIRI);
@@ -128,21 +121,10 @@ public class R2RMLFromTables {
 				}
 			}
 		} else if (k == Kind.IRI) {
-			StringBuilder template = new StringBuilder();
-			for (Column column : c.columns()) {
-				if (notTheGraphColumn(column)) {
-					if (column.isVirtual()) {
-						template.append(((VirtualSingleValueColumn) column).value());
-					} else {
-						template.append('{').append(column.name()).append('}');
-					}
-				} else {
-					addGraphs(model, vf, map, column);
-				}
-			}
+			StringBuilder template = iriToTemplate(model, vf, map, gofc);
 			model.add(map, R2RML.template, vf.createLiteral(template.toString()));
 		} else if (k == Kind.BNODE) {
-			for (Column column : c.columns()) {
+			for (Column column : gofc.columns()) {
 				if (notTheGraphColumn(column)) {
 					if (column.isPhysical()) {
 						model.add(map, R2RML.column, vf.createLiteral(column.name()));
@@ -153,6 +135,86 @@ public class R2RMLFromTables {
 					addGraphs(model, vf, map, column);
 				}
 			}
+		}
+	}
+
+	public static StringBuilder iriToTemplate(Model model, SimpleValueFactory vf, Resource map, GroupOfColumns c) {
+		StringBuilder template = new StringBuilder();
+		for (Column column : c.columns()) {
+			if (notTheGraphColumn(column)) {
+				if (column.isVirtual()) {
+					final String value = ((VirtualSingleValueColumn) column).value();				
+					addIriPartColumnToTemplate(value, template, column);
+				} else {
+					addIriPartColumnToTemplate('{' + column.name()+'}', template, column);
+				}
+			} else {
+				addGraphs(model, vf, map, column);
+			}
+		}
+		return template;
+	}
+
+	public static void addIriPartColumnToTemplate(String value, StringBuilder template, Column column) {
+		
+		String columnName = column.name();
+		int last_ = columnName.lastIndexOf('_');
+		String iriPart =columnName.substring(last_);
+		switch (iriPart){
+		case GroupOfColumns.SCHEME:
+			template.append(value);
+			template.append(':');
+			break;
+		case GroupOfColumns.SCHEME_SPECIFIC_PART:
+			if (value != null) {
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.AUTHORITY:
+			if (value != null) {
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.USER_INFO:
+			if (value != null) {
+				template.append(value);
+				template.append('@');
+			}
+			break;
+		case GroupOfColumns.HOST:
+			if (value != null) {
+				template.append('/').append('/');
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.PORT:
+			if (value != null) {
+				template.append(':');
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.PATH:
+			if (value != null) {
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.QUERY:
+			if (value != null) {
+				template.append('?');
+				template.append(value);
+			}
+			break;
+		case GroupOfColumns.FRAGMENT:
+			if (value != null) {
+				template.append('#');
+				template.append(value);
+			}
+			break;
+		default:
+			if (value != null) {
+				template.append(value);
+			}
+			break;
 		}
 	}
 

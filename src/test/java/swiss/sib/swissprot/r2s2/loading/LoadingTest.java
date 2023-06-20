@@ -64,12 +64,12 @@ public class LoadingTest {
 		loader.runStep(0);
 		loader.runStep(1);
 		validateRdfTypeStatementsLoaded(loader);
-		writeR2RML(loader.tables());
+//		writeR2RML(loader.tables());
 		loader.runStep(2);
 		loader.runStep(3);
-		writeR2RML(loader.tables());
+//		writeR2RML(loader.tables());
 		loader.runStep(4);
-		writeR2RML(loader.tables());
+//		writeR2RML(loader.tables());
 
 		try (Connection conn = openByJdbc(loader.connectionString())) {
 			validateRdfMerged(conn);
@@ -109,7 +109,7 @@ public class LoadingTest {
 			assertTrue(rs.next());
 			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
 			assertTrue(rs.next());
-			assertEquals(rs.getString(1), "subject_rdf_type_parts");
+			assertEquals(rs.getString(1), "subject_rdf_type_fragment");
 			assertFalse(rs.next());
 		}
 
@@ -119,7 +119,7 @@ public class LoadingTest {
 			assertTrue(rs.next());
 			assertEquals(rs.getString(1), "object_rdfs_label_langvalue");
 			assertTrue(rs.next());
-			assertEquals(rs.getString(1), "subject_rdf_type_parts");
+			assertEquals(rs.getString(1), "subject_rdf_type_fragment");
 			assertFalse(rs.next());
 		}
 	}
@@ -164,7 +164,7 @@ public class LoadingTest {
 
 					try (java.sql.Statement count = conn_rw.createStatement();
 							var rs = count
-									.executeQuery("SELECT COUNT(DISTINCT object_rdf_type_parts) FROM " + t.name())) {
+									.executeQuery("SELECT COUNT(DISTINCT object_rdf_type_fragment) FROM " + t.name())) {
 						assertTrue(rs.next());
 						assertEquals(2, rs.getInt(1));
 						assertFalse(rs.next());

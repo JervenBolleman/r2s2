@@ -63,7 +63,7 @@ public class SparqlOnLoadedTest {
 		try {
 			testTypePresence(statements, jdbcDriver, 2);
 		} catch (Exception e) {
-			fail(e);
+			fail(e.getMessage(), e);
 		}
 	}
 
@@ -121,14 +121,14 @@ public class SparqlOnLoadedTest {
 	}
 
 	public void testSqlCountOfTypes(int types, final String jdbc) throws SQLException {
-		try (Connection conn = openByJdbc(jdbc); var statement = conn.createStatement()) {
-			try (ResultSet rs = statement.executeQuery(
-					"SELECT table_name FROM information_schema.tables")){// WHERE UCASE(table_name) LIKE 'TYPE%'")) {
-				while(rs.next()) {
-					System.out.println(rs.getString(1));
-				}
-			}
-		}
+//		try (Connection conn = openByJdbc(jdbc); var statement = conn.createStatement()) {
+//			try (ResultSet rs = statement.executeQuery(
+//					"SELECT table_name FROM information_schema.tables")){// WHERE UCASE(table_name) LIKE 'TYPE%'")) {
+//				while(rs.next()) {
+//					System.out.println(rs.getString(1));
+//				}
+//			}
+//		}
 		try (Connection conn = openByJdbc(jdbc); var statement = conn.createStatement()) {
 			try (ResultSet rs = statement.executeQuery(
 					"SELECT COUNT(table_name) FROM information_schema.tables WHERE UCASE(table_name) LIKE 'TYPE%'")) {

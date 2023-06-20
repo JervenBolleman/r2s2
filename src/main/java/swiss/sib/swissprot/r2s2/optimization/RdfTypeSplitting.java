@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import swiss.sib.swissprot.r2s2.JdbcUtil;
+import swiss.sib.swissprot.r2s2.r2rml.R2RMLFromTables;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
 import swiss.sib.swissprot.r2s2.sql.PredicateMap;
@@ -107,7 +108,12 @@ public class RdfTypeSplitting {
 		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
 		for (int j = 0; j < notVirtual.size(); j++) {
 			Column c = notVirtual.get(j);
-			in += c.name() + " = '" + rs.getString(j + 1) + "'";
+			final String part = rs.getString(j + 1);
+			if (part == null) {
+				in += c.name() + " IS NULL";
+			} else {
+				in += c.name() + " = '" + part + "'";
+			}
 			if (j != notVirtual.size() - 1) {
 				in += " AND ";
 			}
@@ -131,10 +137,11 @@ public class RdfTypeSplitting {
 			throws SQLException {
 		List<Column> forName = notVirtual.stream().filter(c -> !c.name().endsWith(GroupOfColumns.GRAPH))
 				.collect(Collectors.toList());
-		String typeIri = rs.getObject(1).toString();
-		for (int i = 2; i <= forName.size(); i++) {
-			typeIri += rs.getObject(i).toString();
+		StringBuilder typeTemplate = new StringBuilder();
+		for (int i = 1; i <= forName.size(); i++) {
+			R2RMLFromTables.addIriPartColumnToTemplate(rs.getString(i), typeTemplate,forName.get(i-1));
 		}
+		String typeIri = typeTemplate.toString();
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {
 			if (typeIri.startsWith(en.getValue()) && !en.getKey().isEmpty()) {
 				return en.getKey() + "_" + typeIri.substring(en.getValue().length());

@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceGraphEnum;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceHostEnums;
 import swiss.sib.swissprot.r2s2.loading.steps.IntroduceIndexes;
-import swiss.sib.swissprot.r2s2.loading.steps.IntroduceProtocolEnums;
+import swiss.sib.swissprot.r2s2.loading.steps.IntroduceIriSchemeEnum;
 import swiss.sib.swissprot.r2s2.loading.steps.OptimizeForR2RML;
 import swiss.sib.swissprot.r2s2.loading.steps.ParseIntoSOGTables;
 import swiss.sib.swissprot.r2s2.loading.steps.ReOptimizeForR2RML;
@@ -153,7 +153,7 @@ public class Loader {
 			l -> l.tables = new OptimizeForR2RML(l.connectionString(), l.tables, l.namespaces).run(), Loader::writeR2RML,
 			l -> l.tables = new TableMergingConcurence(l.connectionString(), l.tables).run(), Loader::writeR2RML,
 			l -> l.tables = new ReOptimizeForR2RML(l.connectionString(), l.tables, l.namespaces).run(), Loader::writeR2RML,
-			l -> new IntroduceProtocolEnums(l.connectionString(), l.tables).run(),
+			l -> new IntroduceIriSchemeEnum(l.connectionString(), l.tables).run(),
 			l -> new IntroduceHostEnums(l.connectionString(), l.tables).run(),
 			l -> new IntroduceIndexes(l.connectionString(), l.tables).run(),
 			l -> new PoorMansVacuum(l.connectionString(), l.dbFile).run());

@@ -20,9 +20,9 @@ import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 import swiss.sib.swissprot.r2s2.sql.Table;
 
-public record IntroduceProtocolEnums(String temp, List<Table> tables) {
+public record IntroduceIriSchemeEnum(String temp, List<Table> tables) {
 
-	private static final Logger logger = LoggerFactory.getLogger(IntroduceProtocolEnums.class);
+	private static final Logger logger = LoggerFactory.getLogger(IntroduceIriSchemeEnum.class);
 
 	public void run() {
 		try (Connection conn_rw = openByJdbc(temp)) {
@@ -33,7 +33,7 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables) {
 				String findDistinctProtocols = protocols.stream().collect(Collectors.joining(" UNION ", "(", ")"));
 
 				try (java.sql.Statement stat = conn_rw.createStatement()) {
-					final String sql = "CREATE TYPE " + SqlDatatype.PROTOCOL.label()
+					final String sql = "CREATE TYPE " + SqlDatatype.SCHEME.label()
 							+ " AS ENUM (SELECT DISTINCT * FROM (" + findDistinctProtocols + "))";
 					logger.info("creating protocol part: " + sql);
 					stat.execute(sql);
@@ -48,23 +48,23 @@ public record IntroduceProtocolEnums(String temp, List<Table> tables) {
 
 	public Stream<String> collectProtocolParts(Connection conn_rw, Table table) {
 		return table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns).flatMap(List::stream)
-				.filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.PROTOCOL))
+				.filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.SCHEME))
 				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name() + " WHERE "+c.name()+ " IS NOT NULL");
 	}
 
 	public void adaptProtocolParts(Connection conn_rw, Table table) {
 		final Iterator<Column> iterator = table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns)
-				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.PROTOCOL))
+				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.SCHEME))
 				.iterator();
 		while (iterator.hasNext()) {
 			Column protocolColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
 				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name() + " TYPE"
-						+ SqlDatatype.PROTOCOL.label();
+						+ SqlDatatype.SCHEME.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
 				JdbcUtil.commitIfNeeded(conn_rw);
-				protocolColumn.setDatatype(SqlDatatype.PROTOCOL);
+				protocolColumn.setDatatype(SqlDatatype.SCHEME);
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}

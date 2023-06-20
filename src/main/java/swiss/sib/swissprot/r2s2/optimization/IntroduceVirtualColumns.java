@@ -32,18 +32,32 @@ public class IntroduceVirtualColumns {
 			Column column = columns.get(i);
 			if (!column.isVirtual()) {
 				try (Statement ct = conn.createStatement()) {
-					String dc = "SELECT DISTINCT " + column.name() + " FROM " + table.name() + " LIMIT 2";
+					String ddc = "SELECT DISTINCT * FROM " + table.name() + " LIMIT 20";
 
+					log.warn("Running: " + ddc);
+					try (ResultSet executeQuery = ct.executeQuery(ddc)) {
+						while (executeQuery.next()) {
+							for (int j = 0; j < 10; j++) {
+								log.info(executeQuery.getString(j));
+							}
+						}
+					} catch (SQLException e) {
+						//
+					}
+					String dc = "SELECT DISTINCT " + column.name() + " FROM " + table.name() + " LIMIT 2";
 					log.warn("Running: " + dc);
 					try (ResultSet executeQuery = ct.executeQuery(dc)) {
 						boolean first = executeQuery.next();
-						assert first;
-
-						String value = executeQuery.getString(1);
-						if (!executeQuery.next()) {
-							replaceAColumn(table, columns, conn, i, column, value);
+						if (!first) {
+							log.info(table.name() + '.' + column.name() + " is a null valued column");
+							replaceAColumn(table, columns, conn, i, column, null);
 						} else {
-							log.info(table.name() + '.' + column.name() + " has more than one value");
+							String value = executeQuery.getString(1);
+							if (!executeQuery.next()) {
+								replaceAColumn(table, columns, conn, i, column, value);
+							} else {
+								log.info(table.name() + '.' + column.name() + " has more than one value");
+							}
 						}
 					}
 				} catch (SQLException e) {
@@ -53,9 +67,9 @@ public class IntroduceVirtualColumns {
 		}
 	}
 
-	public static void replaceAColumn(Table table, List<Column> columns, Connection conn, int i, Column column,
+	private static void replaceAColumn(Table table, List<Column> columns, Connection conn, int i, Column column,
 			String value) throws SQLException {
-		log.info(table.name() + '.' + column.name() + " has one value");
+		log.info(table.name() + '.' + column.name() + " has one value:"+value);
 		columns.set(i, new VirtualSingleValueColumn(column.name(), column.sqlDatatype(), value));
 		try (Statement ct2 = conn.createStatement()) {
 			String dropColumn = "ALTER TABLE " + table.name() + " DROP " + column.name();
@@ -72,5 +86,4 @@ public class IntroduceVirtualColumns {
 			}
 		}
 	}
-
 }

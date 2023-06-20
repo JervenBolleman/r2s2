@@ -78,9 +78,11 @@ public class TableDescriptionAsRdf {
 		if (c.isPhysical()) {
 			model.add(vf.createStatement(subjectColumn, RDF.TYPE, TableAsRdf.physicalColumn));
 		} else {
-			model.add(vf.createStatement(subjectColumn, RDF.TYPE, TableAsRdf.virtualColumn));
 			VirtualSingleValueColumn vc = (VirtualSingleValueColumn) c;
-			model.add(vf.createStatement(subjectColumn, RDF.VALUE, vf.createLiteral(vc.value())));
+			if (vc.value() !=null) {
+				model.add(vf.createStatement(subjectColumn, RDF.TYPE, TableAsRdf.virtualColumn));
+				model.add(vf.createStatement(subjectColumn, RDF.VALUE, vf.createLiteral(vc.value())));
+			}
 		}
 		model.add(vf.createStatement(subjectColumn, RDFS.LABEL, vf.createLiteral(c.name())));
 		model.add(vf.createStatement(subjectColumn, TableAsRdf.datatype, vf.createLiteral(c.sqlDatatype().label())));

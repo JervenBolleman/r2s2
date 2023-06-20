@@ -35,7 +35,7 @@ public record IntroduceHostEnums(String temp, List<Table> tables) {
 				try (java.sql.Statement stat = conn_rw.createStatement()) {
 					final String sql = "CREATE TYPE " + SqlDatatype.HOST.label() + " AS ENUM (SELECT DISTINCT * FROM ("
 							+ findDistinctHosts + "))";
-					logger.info("creating protocol part: " + sql);
+					logger.info("creating host part: " + sql);
 					stat.execute(sql);
 					tables.stream().forEach(table -> adaptHostParts(conn_rw, table));
 				}

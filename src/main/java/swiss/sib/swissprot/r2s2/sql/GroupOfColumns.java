@@ -1,9 +1,9 @@
 package swiss.sib.swissprot.r2s2.sql;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import org.eclipse.rdf4j.model.IRI;
@@ -19,12 +19,20 @@ public record GroupOfColumns(List<Column> columns) {
 	public static final String IRI = "_iri";
 	public static final String BNODE = "_bnode";
 	public static final String PARTS = "_parts";
-	public static final String PROTOCOL = "_protocol";
-	public static final String GRAPH = "_graph";
+	public static final String SCHEME = "_scheme";
+	public static final String SCHEME_SPECIFIC_PART = "_scheme_specific_part";
+	public static final String AUTHORITY = "_authority";
+	public static final String USER_INFO = "_user_info";
 	public static final String HOST = "_host";
+	public static final String PORT = "_port";
+	public static final String PATH = "_path";
+	public static final String QUERY = "_query";
+	public static final String FRAGMENT = "_fragment";
+	public static final String GRAPH = "_graph";
+	public static final List<String> IRI_PARTS = List.of(SCHEME, SCHEME_SPECIFIC_PART, AUTHORITY, USER_INFO, HOST, PORT, PATH, QUERY, FRAGMENT);
 
 	public GroupOfColumns(List<Column> columns) {
-		this.columns = new CopyOnWriteArrayList<>(columns);
+		this.columns = new ArrayList<>(columns);
 	}
 
 	public String definition() {
@@ -36,9 +44,9 @@ public record GroupOfColumns(List<Column> columns) {
 		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
 		switch (kind) {
 		case IRI:
-			return new GroupOfColumns(List.of(new Column(prefix + predicatePart + PROTOCOL, SqlDatatype.TEXT),
-					new Column(prefix + predicatePart + HOST, SqlDatatype.TEXT),
-					new Column(prefix + predicatePart + PARTS, SqlDatatype.TEXT)));
+			return new GroupOfColumns(IRI_PARTS.stream()
+					.map(s -> prefix + predicatePart + s).map(s -> new Column(s, SqlDatatype.TEXT))
+					.toList());
 		case BNODE:
 			return new GroupOfColumns(List.of(new Column(prefix + predicatePart + ID, SqlDatatype.BIGINT)));
 		case LITERAL:

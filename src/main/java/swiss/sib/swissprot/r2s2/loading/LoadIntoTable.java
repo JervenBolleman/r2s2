@@ -11,6 +11,8 @@
 package swiss.sib.swissprot.r2s2.loading;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -85,12 +87,39 @@ public final class LoadIntoTable implements AutoCloseable {
 		private int add(Value subjectS, PreparedStatement stat, int index) throws SQLException {
 			if (subjectS.isIRI()) {
 				String i = subjectS.stringValue();
-				String protocol = i.substring(0, i.indexOf("://") + 3);
-				String host = i.substring(protocol.length(), i.indexOf('/', protocol.length()));
-				String q = i.substring(protocol.length() + host.length());
-				stat.setString(++index, protocol);
-				stat.setString(++index, host);
-				stat.setString(++index, q);
+				try {
+					final URI u = new URI(i);
+//					public static final String SCHEME = "_scheme";
+					stat.setString(++index, u.getScheme());
+//					public static final String SCHEME_SPECIFIC_PART = "_scheme_specific_part";
+//					public static final String AUTHORITY = "_authority";
+					if (u.getHost() == null) {
+						stat.setString(++index, u.getSchemeSpecificPart());
+						stat.setString(++index, u.getAuthority());
+					} else {
+						stat.setString(++index, null);
+						stat.setString(++index, null);
+					}
+//					public static final String USER_INFO = "_user-info";
+					stat.setString(++index, u.getUserInfo());
+//					public static final String HOST = "_host";
+					stat.setString(++index, u.getHost());
+//					public static final String PORT = "_port";
+					if (u.getPort() < 0) {
+						stat.setString(++index, null);
+					} else {
+						stat.setString(++index, String.valueOf(u.getPort()));
+					}
+//					public static final String PATH = "_path";
+					stat.setString(++index, u.getPath());
+//					public static final String QUERY = "_query";
+					stat.setString(++index, u.getQuery());
+//					public static final String FRAGMENT = "_fragment";
+					stat.setString(++index, u.getFragment());
+				} catch (URISyntaxException e) {
+					throw new IllegalStateException(e);
+				}
+
 			} else if (subjectS.isBNode()) {
 				long i = ((LoaderBlankNode) subjectS).id();
 				stat.setLong(++index, i);
@@ -139,12 +168,38 @@ public final class LoadIntoTable implements AutoCloseable {
 		private void add(Value subjectS, DuckDBAppender appender) throws SQLException {
 			if (subjectS.isIRI()) {
 				String i = subjectS.stringValue();
-				String protocol = i.substring(0, i.indexOf("://") + 3);
-				String host = i.substring(protocol.length(), i.indexOf('/', protocol.length()));
-				String q = i.substring(protocol.length() + host.length());
-				appender.append(protocol);
-				appender.append(host);
-				appender.append(q);
+				try {
+					final URI u = new URI(i);
+//					public static final String SCHEME = "_scheme";
+					appender.append(u.getScheme());
+//					public static final String SCHEME_SPECIFIC_PART = "_scheme_specific_part";
+//					public static final String AUTHORITY = "_authority";
+					if (u.getHost() == null) {
+						appender.append(u.getSchemeSpecificPart());
+						appender.append(u.getAuthority());
+					} else {
+						appender.append(null);
+						appender.append(null);
+					}
+//					public static final String USER_INFO = "_user-info";
+					appender.append(u.getUserInfo());
+//					public static final String HOST = "_host";
+					appender.append(u.getHost());
+//					public static final String PORT = "_port";
+					if (u.getPort() < 0) {
+						appender.append(null);
+					} else { 
+						appender.append(String.valueOf(u.getPort()));
+					}
+//					public static final String PATH = "_path";
+					appender.append(u.getPath());
+//					public static final String QUERY = "_query";
+					appender.append(u.getQuery());
+//					public static final String FRAGMENT = "_fragment";
+					appender.append(u.getFragment());
+				} catch (URISyntaxException e) {
+					throw new IllegalStateException(e);
+				}
 			} else if (subjectS.isBNode()) {
 				long i = ((LoaderBlankNode) subjectS).id();
 				appender.append(i);
