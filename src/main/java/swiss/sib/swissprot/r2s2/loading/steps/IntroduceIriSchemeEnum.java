@@ -26,7 +26,7 @@ public record IntroduceIriSchemeEnum(String temp, List<Table> tables) {
 
 	public void run() {
 		try (Connection conn_rw = openByJdbc(temp)) {
-			Set<String> protocols = tables.stream().flatMap(table -> collectProtocolParts(conn_rw, table))
+			Set<String> protocols = tables.stream().flatMap(table -> collectSchemeParts(conn_rw, table))
 					.collect(Collectors.toSet());
 			//Can be the case if all are virtual
 			if (!protocols.isEmpty()) {
@@ -37,7 +37,7 @@ public record IntroduceIriSchemeEnum(String temp, List<Table> tables) {
 							+ " AS ENUM (SELECT DISTINCT * FROM (" + findDistinctProtocols + "))";
 					logger.info("creating protocol part: " + sql);
 					stat.execute(sql);
-					tables.stream().forEach(table -> adaptProtocolParts(conn_rw, table));
+					tables.stream().forEach(table -> adaptSchemeParts(conn_rw, table));
 				}
 			}
 		} catch (SQLException e) {
@@ -46,20 +46,20 @@ public record IntroduceIriSchemeEnum(String temp, List<Table> tables) {
 
 	}
 
-	public Stream<String> collectProtocolParts(Connection conn_rw, Table table) {
+	public Stream<String> collectSchemeParts(Connection conn_rw, Table table) {
 		return table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns).flatMap(List::stream)
 				.filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.SCHEME))
 				.map(c -> "SELECT DISTINCT " + c.name() + " FROM " + table.name() + " WHERE "+c.name()+ " IS NOT NULL");
 	}
 
-	public void adaptProtocolParts(Connection conn_rw, Table table) {
+	public void adaptSchemeParts(Connection conn_rw, Table table) {
 		final Iterator<Column> iterator = table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns)
 				.flatMap(List::stream).filter(Column::isPhysical).filter(c -> c.name().endsWith(GroupOfColumns.SCHEME))
 				.iterator();
 		while (iterator.hasNext()) {
 			Column protocolColumn = iterator.next();
 			try (java.sql.Statement stat = conn_rw.createStatement()) {
-				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name() + " TYPE"
+				final String cast = "ALTER TABLE " + table.name() + " ALTER " + protocolColumn.name() + " TYPE "
 						+ SqlDatatype.SCHEME.label();
 				logger.info("casting " + cast);
 				stat.execute(cast);
