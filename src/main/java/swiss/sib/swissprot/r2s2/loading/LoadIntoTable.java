@@ -10,8 +10,6 @@
  *******************************************************************************/
 package swiss.sib.swissprot.r2s2.loading;
 
-
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -63,35 +61,41 @@ public final class LoadIntoTable implements AutoCloseable {
 	private final Connection conn;
 
 	private interface Inserter {
-		public void add(String[] parseS, Resource subjectS, String[] parseO, Value objectS, int tempGraphId) throws SQLException;
+		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
+				throws SQLException;
 
 		public void close() throws SQLException;
 	}
 
-	private record JdbcInserter(Connection conn, String sqlTemplate) implements Inserter {
-		public JdbcInserter(Connection conn, String name, GroupOfColumns subjectColumns, GroupOfColumns objectColumns) {
-			this(conn, "insert into "+name +'('+Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream()).map(Column::name).collect(Collectors.joining(", "))+") values ("+Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream()).map(c -> "?").collect(Collectors.joining(", "))+")");
+	private record JdbcInserter(PreparedStatement stat) implements Inserter {
+		public JdbcInserter(Connection conn, String name, GroupOfColumns subjectColumns, GroupOfColumns objectColumns)
+				throws SQLException {
+			this(conn.prepareStatement("insert into " + name + '('
+					+ Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream())
+							.map(Column::name).collect(Collectors.joining(", "))
+					+ ") values (" + Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream())
+							.map(c -> "?").collect(Collectors.joining(", "))
+					+ ")"));
 		}
 
-		public void add(String[] parseS, Resource subjectS, String[] parseO, Value objectS, int tempGraphId) throws SQLException {
-			try (PreparedStatement stat = conn.prepareStatement(sqlTemplate)) {
-				int offset = add(parseS, subjectS, stat, 0);
-				offset = add(parseO, objectS, stat, offset);
-				stat.setInt(++offset, tempGraphId);
-				stat.executeUpdate();
-			}
+		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
+				throws SQLException {
+			int offset = add(subjParts, subj, stat, 0);
+			offset = add(objParts, obj, stat, offset);
+			stat.setInt(++offset, tempGraphId);
+			stat.executeUpdate();
 		}
 
 		public void close() throws SQLException {
-
+			stat.close();
 		}
-		
-		private int add(String[] parseO, Value subjectS, PreparedStatement stat, int index) throws SQLException {
-			if (subjectS.isBNode()) {
-				long i = ((LoaderBlankNode) subjectS).id();
+
+		private int add(String[] parseO, Value v, PreparedStatement stat, int index) throws SQLException {
+			if (v.isBNode()) {
+				long i = ((LoaderBlankNode) v).id();
 				stat.setLong(++index, i);
 			} else {
-				for (int i=0;i<parseO.length;i++) {
+				for (int i = 0; i < parseO.length; i++) {
 					stat.setString(++index, parseO[i]);
 				}
 			}
@@ -109,10 +113,11 @@ public final class LoadIntoTable implements AutoCloseable {
 			this.appender = conn.createAppender("", table.name());
 		}
 
-		public void add(String[] parseS, Resource subjectS, String[] parseO, Value objectS, int tempGraphId) throws SQLException {
+		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
+				throws SQLException {
 			appender.beginRow();
-			add(parseS, subjectS, appender);
-			add(parseO, objectS, appender);
+			add(subjParts, subj, appender);
+			add(objParts, obj, appender);
 			appender.append(tempGraphId);
 			appender.endRow();
 			if (c % FLUSH_EVERY_X == 0) {
@@ -132,7 +137,7 @@ public final class LoadIntoTable implements AutoCloseable {
 				long i = ((LoaderBlankNode) subjectS).id();
 				appender.append(i);
 			} else {
-				for (int i=0;i<parseO.length;i++) {
+				for (int i = 0; i < parseO.length; i++) {
 					appender.append(parseO[i]);
 				}
 			}
@@ -285,11 +290,12 @@ public final class LoadIntoTable implements AutoCloseable {
 			final String[] parseS = parse(subjectS);
 			final String[] parseO = parse(objectS);
 			lock.lock();
-			inserter.add(parseS, subjectS,  parseO, objectS, tempGraphId);
+			inserter.add(parseS, subjectS, parseO, objectS, tempGraphId);
 		} finally {
 			lock.unlock();
 		}
 	}
+
 	private String[] parse(Value v) {
 		if (v.isIRI()) {
 			String[] r = new String[9];
@@ -334,12 +340,12 @@ public final class LoadIntoTable implements AutoCloseable {
 				r[0] = l.getLanguage().get();
 			} else {
 				IRI datatype = l.getDatatype();
-				r[0] =datatype.stringValue();
+				r[0] = datatype.stringValue();
 			}
 			r[1] = l.stringValue();
 			return r;
 		}
-		throw new IllegalStateException("Unknown value type:"+v);
+		throw new IllegalStateException("Unknown value type:" + v);
 	}
 
 	public Kind subjectKind() {
