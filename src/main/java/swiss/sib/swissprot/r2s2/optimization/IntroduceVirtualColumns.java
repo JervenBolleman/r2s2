@@ -32,18 +32,6 @@ public class IntroduceVirtualColumns {
 			Column column = columns.get(i);
 			if (!column.isVirtual()) {
 				try (Statement ct = conn.createStatement()) {
-					String ddc = "SELECT DISTINCT * FROM " + table.name() + " LIMIT 20";
-
-					log.warn("Running: " + ddc);
-					try (ResultSet executeQuery = ct.executeQuery(ddc)) {
-						while (executeQuery.next()) {
-							for (int j = 0; j < 10; j++) {
-								log.info(executeQuery.getString(j));
-							}
-						}
-					} catch (SQLException e) {
-						//
-					}
 					String dc = "SELECT DISTINCT " + column.name() + " FROM " + table.name() + " LIMIT 2";
 					log.warn("Running: " + dc);
 					try (ResultSet executeQuery = ct.executeQuery(dc)) {
