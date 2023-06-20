@@ -103,6 +103,7 @@ public class RdfTypeSplitting {
 			// Can happen if the table name is not valid.
 			newTable = new Table("type_" + TYPE_ID.incrementAndGet(), new GroupOfColumns(t.subject().columns()),
 					t.subjectKind(), List.of(pm.copy()));
+			newTable.create(conn);
 		}
 		newTables.add(newTable);
 		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
