@@ -24,13 +24,22 @@ public record IntroduceIndexes(String temp, List<Table> tables) {
 			try (Connection conn_rw = openByJdbc(temp)) {
 				final String subjColumns = table.subject().columns().stream().filter(Column::isPhysical)
 						.map(Column::name).collect(Collectors.joining(", "));
-				try (Statement stat = conn_rw.createStatement()) {
-					final String createIdx = "CREATE UNIQUE INDEX " + table.name() + "_subj_idx ON " + table.name()
-							+ " (" + subjColumns + ")";
-					logger.info("creating index " + createIdx);
-					stat.execute(createIdx);
-					JdbcUtil.commitIfNeeded(conn_rw);
-				}
+				if (!subjColumns.isEmpty())
+					try (Statement stat = conn_rw.createStatement()) {
+						final String createIdx = "CREATE UNIQUE INDEX " + table.name() + "_subj_idx ON " + table.name()
+								+ " (" + subjColumns + ")";
+						logger.info("creating index " + createIdx);
+						stat.execute(createIdx);
+						JdbcUtil.commitIfNeeded(conn_rw);
+					} catch (SQLException e) {
+						try (Statement stat = conn_rw.createStatement()) {
+							final String createIdx = "CREATE INDEX " + table.name() + "_subj_idx ON " + table.name()
+									+ " (" + subjColumns + ")";
+							logger.info("creating index " + createIdx);
+							stat.execute(createIdx);
+							JdbcUtil.commitIfNeeded(conn_rw);
+						}
+					}
 			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}
