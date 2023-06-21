@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -30,12 +31,19 @@ import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import it.unibz.inf.ontop.injection.OntopSQLOWLAPIConfiguration;
 import it.unibz.inf.ontop.rdf4j.repository.OntopRepository;
 
 public class SparqlOnLoadedTest {
+
+    static Stream<Arguments> driverStrings(){
+        return Stream.of(
+//        		Arguments.of("jdbc:duckdb:", "org.duckdb.DuckDBDriver", "f.main"),
+                Arguments.of("jdbc:h2:file:","org.h2.Driver",""));
+    }
 
 	@TempDir
 	public File temp;
@@ -47,55 +55,53 @@ public class SparqlOnLoadedTest {
 	
 	@Disabled
 	@ParameterizedTest
-	@ValueSource(strings ={"jdbc:duckdb:", "jdbc:h2:file:"})
-	public void loadAndQueryForTypes(String jdbcDriver) throws Exception {
+	@MethodSource("driverStrings")
+	public void loadAndQueryForTypes(String jdbcUrlPrefix, String jdbcDriver, String dbName) throws Exception {
 		List<Statement> statements = LoadingTest.statements;
-		testTypePresence(statements, jdbcDriver, 2);
+		testTypePresence(statements, jdbcUrlPrefix, jdbcDriver, 2, dbName);
 	}
 
 	@ParameterizedTest
-//	@ValueSource(strings ={"jdbc:duckdb:", "jdbc:h2:file:"})
-	@ValueSource(strings ={"jdbc:h2:file:"})
-	public void loadAndQueryForTypes2(String jdbcDriver) {
+	@MethodSource("driverStrings")
+	public void loadAndQueryForTypes2(String jdbcUrlPrefix, String jdbcDriver, String dbName) {
 		List<Statement> statements = IntStream.range(1, 100).mapToObj(i -> VF.createStatement(VF.createIRI(NS, "i" + i),
 				RDF.TYPE, VF.createIRI(NS, i % 2 == 0 ? "odd" : "even"))).collect(Collectors.toList());
 
 		try {
-			testTypePresence(statements, jdbcDriver, 2);
+			testTypePresence(statements, jdbcUrlPrefix, jdbcDriver, 2, dbName);
 		} catch (Exception e) {
 			fail(e.getMessage(), e);
 		}
 	}
 
 	@ParameterizedTest
-//	@ValueSource(strings ={"jdbc:duckdb:", "jdbc:h2:file:"})
-	@ValueSource(strings ={"jdbc:h2:file:"})
-	public void loadAndQueryForTypes3(String jdbcDriver) {
+	@MethodSource("driverStrings")
+	public void loadAndQueryForTypes3(String jdbcUrlPrefix, String jdbcDriver, String dbName) {
 		List<Statement> statements = IntStream.range(1, 100).mapToObj(i -> VF.createStatement(VF.createIRI(NS, "i" + i),
 				RDF.TYPE, VF.createIRI(NS, i % 2 == 0 ? "odd" : "even"))).collect(Collectors.toList());
 		IntStream.range(1, 100)
 				.mapToObj(i -> VF.createStatement(VF.createIRI(NS, "i" + i), RDFS.LABEL, VF.createLiteral(i)))
 				.forEach(statements::add);
 		try {
-			testTypePresence(statements, jdbcDriver, 2);
+			testTypePresence(statements,jdbcUrlPrefix, jdbcDriver, 2, dbName);
 		} catch (Exception e) {
 			fail(e.getMessage(), e);
 		}
 	}
 
-	private void testTypePresence(List<Statement> statements, String jdbcDriver, int types)
+	private void testTypePresence(List<Statement> statements, String jdbcUrlPrefix,String jdbcDriver, int types, String dbName)
 			throws IOException, FileNotFoundException, SQLException, Exception {
 		File newFolder = new File(temp, "f");
 		File input = new File(temp, "input.rdf");
 		File propertyFile = new File(temp, "test.properties");
 		LoadingTest.writeTestData(input, statements);
 		final List<String> lines = List.of(input.getAbsolutePath() + "\thttp://example.org/graph");
-		final String jdbc = jdbcDriver + newFolder.getAbsolutePath();
+		final String jdbc = jdbcUrlPrefix + newFolder.getAbsolutePath();
 		Loader loader = new Loader(newFolder, 0, lines, jdbc);
 		loader.parse();
 //		LoadingTest.writeR2RML(loader.tables());
 		
-		Files.writeString(propertyFile.toPath(), "jdbc.url=" + jdbc );
+		Files.writeString(propertyFile.toPath(), "jdbc.url=" + jdbc +"\njdbc.Driver="+jdbcDriver+"\njdbc.name="+dbName);
 		OntopSQLOWLAPIConfiguration configuration = OntopSQLOWLAPIConfiguration.defaultBuilder()
 				.r2rmlMappingFile(loader.r2rmlPath()).propertyFile(propertyFile).enableTestMode().build();
 		testSparqlDistinctTypes(types, configuration);		
