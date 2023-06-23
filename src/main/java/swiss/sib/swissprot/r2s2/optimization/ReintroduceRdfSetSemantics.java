@@ -20,13 +20,11 @@ public class ReintroduceRdfSetSemantics {
 	private static final Logger log = LoggerFactory.getLogger(ReintroduceRdfSetSemantics.class);
 
 	public static void optimize(Connection conn, Table table) {
-		final Stream<Column> concat = allColumns(table);
-		final boolean thereIsAtLeastOnePhysicalColumn = concat.findAny().isPresent();
+		final boolean thereIsAtLeastOnePhysicalColumn = allColumns(table).findAny().isPresent();
 		if (thereIsAtLeastOnePhysicalColumn) {
 			try {
 				String tempName = table.name() + "_temp";
-//				Table temp = new Table(table.name() + "_temp", table.subject(), table.subjectKind(), table.objects());
-//				temp.create(conn);
+
 				try (Statement st = conn.createStatement()) {
 					String columns = allColumns(table).map(Column::definition).collect(Collectors.joining(", "));
 					final String sql = "CREATE TABLE " + tempName + "(" + columns + ")";
@@ -35,8 +33,8 @@ public class ReintroduceRdfSetSemantics {
 				}
 				try (Statement st = conn.createStatement()) {
 					String columns = allColumns(table).map(Column::name).collect(Collectors.joining(", "));
-					final String sql = "INSERT INTO " + tempName + "(" + columns + ") SELECT DISTINCT "+columns+" FROM "
-							+ table.name() + " ORDER BY "+columns;
+					final String sql = "INSERT INTO " + tempName + "(" + columns + ") SELECT DISTINCT " + columns
+							+ " FROM " + table.name() + " ORDER BY " + columns;
 					log.info("Running:" + sql);
 					st.execute(sql);
 				}

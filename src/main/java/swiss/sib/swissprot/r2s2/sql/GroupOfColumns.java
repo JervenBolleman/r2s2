@@ -29,7 +29,8 @@ public record GroupOfColumns(List<Column> columns) {
 	public static final String QUERY = "_query";
 	public static final String FRAGMENT = "_fragment";
 	public static final String GRAPH = "_graph";
-	public static final List<String> IRI_PARTS = List.of(SCHEME, SCHEME_SPECIFIC_PART, AUTHORITY, USER_INFO, HOST, PORT, PATH, QUERY, FRAGMENT);
+	public static final List<String> IRI_PARTS = List.of(SCHEME, SCHEME_SPECIFIC_PART, AUTHORITY, USER_INFO, HOST, PORT,
+			PATH, QUERY, FRAGMENT);
 
 	public GroupOfColumns(List<Column> columns) {
 		this.columns = new ArrayList<>(columns);
@@ -39,14 +40,13 @@ public record GroupOfColumns(List<Column> columns) {
 		return columns.stream().filter(Column::isPhysical).map(Column::definition).collect(Collectors.joining(", "));
 	}
 
-	public static GroupOfColumns from(Kind kind, String lang, IRI datatype, String prefix, Map<String, String> namespaces,
-			IRI predicate) {
+	public static GroupOfColumns from(Kind kind, String lang, IRI datatype, String prefix,
+			Map<String, String> namespaces, IRI predicate) {
 		final String predicatePart = Naming.iriToSqlNamePart(namespaces, predicate);
 		switch (kind) {
 		case IRI:
-			return new GroupOfColumns(IRI_PARTS.stream()
-					.map(s -> prefix + predicatePart + s).map(s -> new Column(s, SqlDatatype.TEXT))
-					.toList());
+			return new GroupOfColumns(IRI_PARTS.stream().map(s -> prefix + predicatePart + s)
+					.map(s -> new Column(s, SqlDatatype.TEXT)).toList());
 		case BNODE:
 			return new GroupOfColumns(List.of(new Column(prefix + predicatePart + ID, SqlDatatype.BIGINT)));
 		case LITERAL:
@@ -59,7 +59,7 @@ public record GroupOfColumns(List<Column> columns) {
 				final Column valueColumn = new Column(prefix + datatypePart + LIT_VALUE, SqlDatatype.TEXT);
 				return new GroupOfColumns(List.of(datatypeColumn, valueColumn));
 			} else {
-				return null;
+				throw new IllegalStateException("RDF 1.1. every literal should have a lang or a datatype");
 			}
 		case TRIPLE:
 		default:
@@ -97,9 +97,13 @@ public record GroupOfColumns(List<Column> columns) {
 		}
 		return Optional.empty();
 	}
-	
+
 	public GroupOfColumns copy() {
-		
+
 		return new GroupOfColumns(columns.stream().map(Column::copy).collect(Collectors.toList()));
+	}
+	
+	public static boolean isAGraphColumn(Column c) {
+		return c.name().endsWith(GRAPH);
 	}
 }

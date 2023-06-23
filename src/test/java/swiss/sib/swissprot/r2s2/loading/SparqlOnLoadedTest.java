@@ -41,7 +41,7 @@ public class SparqlOnLoadedTest {
 
     static Stream<Arguments> driverStrings(){
         return Stream.of(
-//        		Arguments.of("jdbc:duckdb:", "org.duckdb.DuckDBDriver", "f.main"),
+        		Arguments.of("jdbc:duckdb:", "org.duckdb.DuckDBDriver", "f.main"),
                 Arguments.of("jdbc:h2:file:","org.h2.Driver",""));
     }
 
@@ -101,7 +101,7 @@ public class SparqlOnLoadedTest {
 		loader.parse();
 //		LoadingTest.writeR2RML(loader.tables());
 		
-		Files.writeString(propertyFile.toPath(), "jdbc.url=" + jdbc +"\njdbc.Driver="+jdbcDriver+"\njdbc.name="+dbName);
+		Files.writeString(propertyFile.toPath(), "jdbc.driver="+jdbcDriver+"\njdbc.url=" + jdbc +"\njdbc.name="+dbName);
 		OntopSQLOWLAPIConfiguration configuration = OntopSQLOWLAPIConfiguration.defaultBuilder()
 				.r2rmlMappingFile(loader.r2rmlPath()).propertyFile(propertyFile).enableTestMode().build();
 		testSparqlDistinctTypes(types, configuration);		

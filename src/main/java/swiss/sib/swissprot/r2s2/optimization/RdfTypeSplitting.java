@@ -1,5 +1,7 @@
 package swiss.sib.swissprot.r2s2.optimization;
 
+import static java.util.function.Predicate.not;
+
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -106,6 +108,16 @@ public class RdfTypeSplitting {
 			newTable.create(conn);
 		}
 		newTables.add(newTable);
+		String in = generateInsertIntoSql(t, notVirtual, rs, newTable);
+		log.info("Executing " + in);
+		try (Statement update = conn.createStatement()) {
+			update.executeUpdate(in);
+			JdbcUtil.commitIfNeeded(conn);
+		}
+	}
+
+	private static String generateInsertIntoSql(Table t, List<Column> notVirtual, ResultSet rs, Table newTable)
+			throws SQLException {
 		String in = "INSERT INTO " + newTable.name() + " (SELECT * FROM " + t.name() + " WHERE ";
 		for (int j = 0; j < notVirtual.size(); j++) {
 			Column c = notVirtual.get(j);
@@ -120,11 +132,7 @@ public class RdfTypeSplitting {
 			}
 		}
 		in += ")";
-		log.info("Executing " + in);
-		try (Statement update = conn.createStatement()) {
-			update.executeUpdate(in);
-			JdbcUtil.commitIfNeeded(conn);
-		}
+		return in;
 	}
 
 	private static Table makeNewTable(Table t, Connection conn, PredicateMap pm, String tableName) throws SQLException {
@@ -136,11 +144,11 @@ public class RdfTypeSplitting {
 
 	private static String newTableName(List<Column> notVirtual, ResultSet rs, Map<String, String> namespaces)
 			throws SQLException {
-		List<Column> forName = notVirtual.stream().filter(c -> !c.name().endsWith(GroupOfColumns.GRAPH))
+		List<Column> forName = notVirtual.stream().filter(not(GroupOfColumns::isAGraphColumn))
 				.collect(Collectors.toList());
 		StringBuilder typeTemplate = new StringBuilder();
 		for (int i = 1; i <= forName.size(); i++) {
-			R2RMLFromTables.addIriPartColumnToTemplate(rs.getString(i), typeTemplate,forName.get(i-1));
+			R2RMLFromTables.addIriPartColumnToTemplate(rs.getString(i), typeTemplate, forName.get(i - 1));
 		}
 		String typeIri = typeTemplate.toString();
 		for (Map.Entry<String, String> en : namespaces.entrySet()) {

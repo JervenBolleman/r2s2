@@ -49,7 +49,7 @@ public class R2RMLFromTables {
 
 	public static void write(List<Table> tables, OutputStream os) throws IOException {
 		final List<Table> copyOf = new ArrayList<>(tables);
-		copyOf.sort((a,b)->a.name().compareTo(b.name()));
+		copyOf.sort((a, b) -> a.name().compareTo(b.name()));
 		final Model model = model(tables);
 		try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(os))) {
 			ModelWritingHelper.writeModel(model, out);
@@ -63,7 +63,7 @@ public class R2RMLFromTables {
 		Resource subjectMap = vf.createBNode();// "subject_" + name());
 		model.add(vf.createStatement(table, RDF.TYPE, R2RML.TriplesMap));
 		model.add(vf.createStatement(table, R2RML.logicalTable, tablename));
-		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(""+t.name().toLowerCase())));
+		model.add(vf.createStatement(tablename, R2RML.tableName, vf.createLiteral(t.name().toLowerCase())));
 		model.add(vf.createStatement(table, R2RML.subjectMap, subjectMap));
 
 		createTemplate(model, vf, subjectMap, t.subjectKind(), "subject", t.subject());
@@ -74,23 +74,20 @@ public class R2RMLFromTables {
 		return model;
 	}
 
-	private static void createPredicateMap(Model model, SimpleValueFactory vf, Resource table, PredicateMap p, Resource subjectMap) {
+	private static void createPredicateMap(Model model, SimpleValueFactory vf, Resource table, PredicateMap p,
+			Resource subjectMap) {
 		Resource predicateMap = vf.createBNode();// "predicateMap_" + name());
 		Resource objectMap = vf.createBNode();// "objectMap_" + name());
-		if (p.predicate().equals(RDF.TYPE)) {
-			
-			if (seeIfR2RMLClassIsAppropiate(p)) {
-				StringBuilder template = iriToTemplate(model, vf, subjectMap, p.groupOfColumns());
-				model.add(vf.createStatement(subjectMap, R2RML.clazz, vf.createIRI(template.toString())));
-				return;
-			}
+		if (p.predicate().equals(RDF.TYPE) && seeIfR2RMLClassIsAppropiate(p)) {
+			StringBuilder template = iriToTemplate(model, vf, subjectMap, p.groupOfColumns());
+			model.add(vf.createStatement(subjectMap, R2RML.clazz, vf.createIRI(template.toString())));
+		} else {
+			model.add(vf.createStatement(table, R2RML.predicateObjectMap, predicateMap));
+			model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
+			model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
+	
+			createTemplate(model, vf, objectMap, p.objectKind(), "object", p.groupOfColumns());
 		}
-		model.add(vf.createStatement(table, R2RML.predicateObjectMap, predicateMap));
-		model.add(vf.createStatement(predicateMap, R2RML.predicate, p.predicate()));
-		model.add(vf.createStatement(predicateMap, R2RML.objectMap, objectMap));
-
-		createTemplate(model, vf, objectMap, p.objectKind(), "object", p.groupOfColumns());
-
 	}
 
 	public static boolean seeIfR2RMLClassIsAppropiate(PredicateMap p) {
@@ -102,7 +99,8 @@ public class R2RMLFromTables {
 		return true;
 	}
 
-	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n, GroupOfColumns gofc) {
+	private static void createTemplate(Model model, SimpleValueFactory vf, Resource map, Kind k, String n,
+			GroupOfColumns gofc) {
 		model.add(vf.createStatement(map, R2RML.termType, asR2RMLTermType(k)));
 		if (k == Kind.LITERAL) {
 			for (Column column : gofc.columns()) {
@@ -143,10 +141,10 @@ public class R2RMLFromTables {
 		for (Column column : c.columns()) {
 			if (notTheGraphColumn(column)) {
 				if (column.isVirtual()) {
-					final String value = ((VirtualSingleValueColumn) column).value();				
+					final String value = ((VirtualSingleValueColumn) column).value();
 					addIriPartColumnToTemplate(value, template, column);
 				} else {
-					addIriPartColumnToTemplate('{' + column.name()+'}', template, column);
+					addIriPartColumnToTemplate('{' + column.name() + '}', template, column);
 				}
 			} else {
 				addGraphs(model, vf, map, column);
@@ -156,11 +154,11 @@ public class R2RMLFromTables {
 	}
 
 	public static void addIriPartColumnToTemplate(String value, StringBuilder template, Column column) {
-		
+
 		String columnName = column.name();
 		int last_ = columnName.lastIndexOf('_');
-		String iriPart =columnName.substring(last_);
-		switch (iriPart){
+		String iriPart = columnName.substring(last_);
+		switch (iriPart) {
 		case GroupOfColumns.SCHEME:
 			template.append(value);
 			template.append(':');
@@ -219,7 +217,7 @@ public class R2RMLFromTables {
 	}
 
 	public static boolean notTheGraphColumn(Column column) {
-		return !column.name().endsWith(GroupOfColumns.GRAPH);
+		return !GroupOfColumns.isAGraphColumn(column);
 	}
 
 	public static void addGraphs(Model model, SimpleValueFactory vf, Resource map, Column column) {
@@ -233,7 +231,8 @@ public class R2RMLFromTables {
 		}
 	}
 
-	private static void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Column column, Function<String, Value> create) {
+	private static void columnDefinition(Model model, SimpleValueFactory vf, IRI p, Resource map, Column column,
+			Function<String, Value> create) {
 		if (column.isVirtual()) {
 			model.add(map, p, create.apply(((VirtualSingleValueColumn) column).value()));
 		} else {

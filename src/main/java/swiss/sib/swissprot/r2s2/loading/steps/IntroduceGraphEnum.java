@@ -5,7 +5,6 @@ import static swiss.sib.swissprot.r2s2.JdbcUtil.openByJdbc;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Iterator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -35,25 +34,20 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 			}
 
 			for (Table table : tables) {
-				for (PredicateMap pm : table.objects()) {
-					final Iterator<Column> iterator = pm.groupOfColumns().columns().stream()
-							.filter(c -> c.name().endsWith(GroupOfColumns.GRAPH)).iterator();
-					while (iterator.hasNext()) {
-						Column graphColumn = iterator.next();
-						StringBuilder asCase = buildCase(graphColumn);
-						alterTable(conn_rw, table, graphColumn, asCase);
-					}
-				}
+				table.objects().stream().map(PredicateMap::groupOfColumns).map(GroupOfColumns::columns)
+						.flatMap(List::stream).filter(GroupOfColumns::isAGraphColumn).forEach(gc -> 
+							alterTable(conn_rw, table, gc));
+
 			}
 		} catch (SQLException e) {
 			throw new IllegalStateException(e);
 		}
 	}
 
-	public void alterTable(Connection conn_rw, Table table, Column graphColumn, StringBuilder asCase) {
+	public void alterTable(Connection conn_rw, Table table, Column graphColumn) {
 		try (Statement stat = conn_rw.createStatement()) {
 			final String cast = "ALTER TABLE " + table.name() + " ALTER " + graphColumn.name()
-					+ " TYPE graph_iris USING (" + asCase + ")";
+					+ " TYPE graph_iris USING (" + buildCase(graphColumn) + ")";
 			logger.info("casting " + cast);
 			stat.execute(cast);
 			JdbcUtil.commitIfNeeded(conn_rw);
@@ -62,7 +56,7 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 		}
 	}
 
-	public StringBuilder buildCase(Column graphColumn) {
+	public String buildCase(Column graphColumn) {
 		StringBuilder asCase = new StringBuilder("CASE");
 		for (TempIriId id : temporaryGraphIdMap.iris()) {
 			asCase.append(" WHEN ");
@@ -75,6 +69,6 @@ public record IntroduceGraphEnum(String temp, List<Table> tables, TemporaryIriId
 		}
 		graphColumn.setDatatype(SqlDatatype.GRAPH_IRIS);
 		asCase.append(" END");
-		return asCase;
+		return asCase.toString();
 	}
 }
