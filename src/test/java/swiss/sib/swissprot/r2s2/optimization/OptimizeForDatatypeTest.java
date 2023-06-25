@@ -8,10 +8,14 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
+import org.eclipse.rdf4j.model.vocabulary.XSD;
 import org.junit.jupiter.api.Test;
 
+import swiss.sib.swissprot.r2s2.loading.Loader.Kind;
 import swiss.sib.swissprot.r2s2.sql.Column;
 import swiss.sib.swissprot.r2s2.sql.GroupOfColumns;
+import swiss.sib.swissprot.r2s2.sql.PredicateMap;
 import swiss.sib.swissprot.r2s2.sql.SqlDatatype;
 
 public class OptimizeForDatatypeTest {
@@ -45,6 +49,23 @@ public class OptimizeForDatatypeTest {
 			}
 			OptimizeForDatatype.optimizeIRI(conn, "t", List.of(c));
 			assertEquals(c.sqlDatatype(), SqlDatatype.TEXT);
+		}
+	}
+	
+	@Test
+	public void xsdYears() throws SQLException {
+		String cn = "object_" + GroupOfColumns.LIT_VALUE;
+		Column c = new Column(cn, SqlDatatype.TEXT);
+		try (Connection conn = DriverManager.getConnection("jdbc:duckdb:")) {
+			try (var ct = conn.createStatement()) {
+				ct.execute("CREATE TABLE t(" + c.definition() + ")");
+			}
+			for (int i = 0; i < 10; i++) {
+				addToTestTable(conn, OptimizeForDatatype.gyear(i));
+			}
+			PredicateMap pm = new PredicateMap(RDFS.LABEL, new GroupOfColumns(List.of(c)), Kind.LITERAL, null, XSD.GYEAR);
+			OptimizeForDatatype.optimizeLiteral(conn, "t", pm, c);
+			assertEquals(SqlDatatype.GYEAR, c.sqlDatatype());
 		}
 	}
 	

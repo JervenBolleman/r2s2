@@ -1,10 +1,14 @@
 package swiss.sib.swissprot.r2s2.optimization;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.vocabulary.XSD;
@@ -22,10 +26,35 @@ import swiss.sib.swissprot.r2s2.sql.Table;
 public class OptimizeForDatatype {
 	private static final Logger logger = LoggerFactory.getLogger(OptimizeForDatatype.class);
 
+	private static final String GYEAR_DEF = "CREATE TYPE " + SqlDatatype.GYEAR.label() + " AS ENUM ("
+			+ IntStream.range(-5999, 3000).mapToObj(OptimizeForDatatype::gyear).map(s -> {
+				return "'" + s + "'";
+			}).collect(Collectors.joining(", ")) + ")";
+
+	static String gyear(int i) {
+		if (i < -1000) {
+			return "-" + Math.abs(i);
+		} else if (i < -100) {
+			return "-0" + Math.abs(i);
+		} else if (i < -10) {
+			return "-00" + Math.abs(i);
+		} else if (i < 0) {
+			return "-000" + Math.abs(i);
+		} else if (i < 10) {
+			return "000" + i;
+		} else if (i < 100) {
+			return "00" + i;
+		} else if (i < 100) {
+			return "0" + i;
+		} else {
+			return Integer.toString(i);
+		}
+	}
+
 	public static void optimize(Connection conn, Table table) {
 		for (PredicateMap p : table.objects()) {
 			if (p.objectKind() == Kind.LITERAL) {
-				optimizeLiteral(conn, table, p);
+				optimizeLiterals(conn, table, p);
 			} else if (p.objectKind() == Kind.IRI) {
 				optimizeIRI(conn, table.name(), p.groupOfColumns().columns());
 			}
@@ -65,25 +94,42 @@ public class OptimizeForDatatype {
 		return false;
 	}
 
-	static void optimizeLiteral(Connection conn, Table table, PredicateMap p) {
+	static void optimizeLiterals(Connection conn, Table table, PredicateMap p) {
 		for (Column c : p.groupOfColumns().columns()) {
-			alterForDatatype(conn, table, p, c, XSD.INT, SqlDatatype.INTEGER, "");
-			alterForDatatype(conn, table, p, c, XSD.INTEGER, SqlDatatype.NUMERIC, "");
-			alterForDatatype(conn, table, p, c, XSD.LONG, SqlDatatype.BIGINT, "");
-			alterForDatatype(conn, table, p, c, XSD.BOOLEAN, SqlDatatype.BOOLEAN,
-					" USING (CASE WHEN " + c.name() + "='true' THEN true ELSE false END)");
-			alterForDatatype(conn, table, p, c, XSD.DOUBLE, SqlDatatype.DOUBLE, "");
-			alterForDatatype(conn, table, p, c, XSD.FLOAT, SqlDatatype.FLOAT, "");
-			alterForDatatype(conn, table, p, c, XSD.DATE, SqlDatatype.DATE, "");
-			alterForDatatype(conn, table, p, c, XSD.DECIMAL, SqlDatatype.NUMERIC, "");
+			optimizeLiteral(conn, table.name(), p, c);
 		}
 	}
 
-	static void alterForDatatype(Connection conn, Table table, PredicateMap p, Column c, final IRI xsd,
+	static void optimizeLiteral(Connection conn, String table, PredicateMap p, Column c) {
+		alterForDatatype(conn, table, p, c, XSD.INT, SqlDatatype.INTEGER, "");
+		alterForDatatype(conn, table, p, c, XSD.INTEGER, SqlDatatype.NUMERIC, "");
+		alterForDatatype(conn, table, p, c, XSD.LONG, SqlDatatype.BIGINT, "");
+		alterForDatatype(conn, table, p, c, XSD.BOOLEAN, SqlDatatype.BOOLEAN,
+				" USING (CASE WHEN " + c.name() + "='true' THEN true ELSE false END)");
+		alterForDatatype(conn, table, p, c, XSD.DOUBLE, SqlDatatype.DOUBLE, "");
+		alterForDatatype(conn, table, p, c, XSD.FLOAT, SqlDatatype.FLOAT, "");
+		alterForDatatype(conn, table, p, c, XSD.DATE, SqlDatatype.DATE, "");
+		alterForDatatype(conn, table, p, c, XSD.DECIMAL, SqlDatatype.NUMERIC, "");
+		if (p.datatype().equals(XSD.GYEAR)) {
+			introducingGYearType(conn);
+			alterForDatatype(conn, table, p, c, XSD.GYEAR, SqlDatatype.GYEAR, "");
+		}
+	}
+
+	private static void introducingGYearType(Connection conn) {
+		try (java.sql.Statement stat = conn.createStatement()) {
+			stat.execute(GYEAR_DEF);
+		} catch (SQLException e) {
+			logger.debug("gyear type already defined");
+			// Swallow as year is already defined.
+		}
+	}
+
+	static void alterForDatatype(Connection conn, String tableName, PredicateMap p, Column c, final IRI xsd,
 			final SqlDatatype sql, String cast) {
 		if (c.isPhysical() && c.name().endsWith(GroupOfColumns.LIT_VALUE)) {
 			if (xsd.equals(p.datatype()) && c.sqlDatatype() != sql) {
-				alterTableTo(table.name(), c, sql, conn, cast);
+				alterTableTo(tableName, c, sql, conn, cast);
 			}
 		}
 	}
@@ -97,8 +143,8 @@ public class OptimizeForDatatype {
 			JdbcUtil.commitIfNeeded(conn);
 			c.setDatatype(dt);
 		} catch (SQLException e) {
-			logger.info(
-					"FAILED to convert column:" + tableName + '.' + c.name() + " to a " + c + " using cast:" + cast);
+			logger.info("FAILED to convert column:" + tableName + '.' + c.name() + " to a " + dt.label()
+					+ " using cast:" + cast);
 		}
 	}
 
