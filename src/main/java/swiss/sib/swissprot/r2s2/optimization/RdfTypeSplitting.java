@@ -52,14 +52,8 @@ public class RdfTypeSplitting {
 	private static List<Table> split(Table t, Iterator<Table> iterator, Connection conn, PredicateMap pm,
 			Map<String, String> namespaces) {
 		List<Table> newTables = new ArrayList<>();
-		List<Column> notVirtual = new ArrayList<>();
-		List<Column> virtual = new ArrayList<>();
-		for (Column c : pm.groupOfColumns().columns()) {
-			if (c.isVirtual())
-				virtual.add(c);
-			else
-				notVirtual.add(c);
-		}
+		List<Column> notVirtual = pm.groupOfColumns().columns().stream().filter(Column::isPhysical).toList();
+		
 		if (notVirtual.isEmpty()) {
 			log.info("Nothing to be done for class cracking");
 		} else {
