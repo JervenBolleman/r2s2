@@ -56,26 +56,36 @@ public final class LoadIntoTable implements AutoCloseable {
 	private final IRI predicate;
 	private final Table table;
 	private final Inserter inserter;
-	private volatile int c = 1;
+
 	private final Lock lock = new ReentrantLock();
 	private final Connection conn;
 
-	private interface Inserter {
+	private interface Inserter extends AutoCloseable {
 		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
 				throws SQLException;
 
 		public void close() throws SQLException;
+
+		public default long count() {
+			return 0L;
+		}
 	}
 
 	private record JdbcInserter(PreparedStatement stat) implements Inserter {
 		public JdbcInserter(Connection conn, String name, GroupOfColumns subjectColumns, GroupOfColumns objectColumns)
 				throws SQLException {
-			this(conn.prepareStatement("insert into " + name + '('
+			this(generateSql(conn, name, subjectColumns, objectColumns));
+		}
+
+		private static PreparedStatement generateSql(Connection conn, String name, GroupOfColumns subjectColumns,
+				GroupOfColumns objectColumns) throws SQLException {
+			String insertViaSql = "insert into " + name + '('
 					+ Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream())
 							.map(Column::name).collect(Collectors.joining(", "))
 					+ ") values (" + Stream.concat(subjectColumns.columns().stream(), objectColumns.columns().stream())
 							.map(c -> "?").collect(Collectors.joining(", "))
-					+ ")"));
+					+ ")";
+			return conn.prepareStatement(insertViaSql);
 		}
 
 		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
@@ -103,14 +113,17 @@ public final class LoadIntoTable implements AutoCloseable {
 		}
 	}
 
-	private class DuckDbInserter implements Inserter {
+	private static class DuckDbInserter implements Inserter {
 		private final DuckDBAppender appender;
 		private final DuckDBConnection conn;
+		private volatile int count = 1;
+		private final String tableName;
 
-		public DuckDbInserter(DuckDBConnection conn) throws SQLException {
+		public DuckDbInserter(DuckDBConnection conn, String tableName) throws SQLException {
 			super();
 			this.conn = conn;
-			this.appender = conn.createAppender("", table.name());
+			this.tableName = tableName;
+			this.appender = conn.createAppender("", tableName);
 		}
 
 		public void add(String[] subjParts, Resource subj, String[] objParts, Value obj, int tempGraphId)
@@ -120,11 +133,11 @@ public final class LoadIntoTable implements AutoCloseable {
 			add(objParts, obj, appender);
 			appender.append(tempGraphId);
 			appender.endRow();
-			if (c % FLUSH_EVERY_X == 0) {
+			if (count % FLUSH_EVERY_X == 0) {
 				appender.flush();
-				logger.info("Flushed " + table.name() + " now has " + c + " rows");
+				logger.info("Flushed " + tableName + " now has " + count + " rows");
 			}
-			c++;
+			count++;
 		}
 
 		public void close() throws SQLException {
@@ -141,6 +154,10 @@ public final class LoadIntoTable implements AutoCloseable {
 					appender.append(parseO[i]);
 				}
 			}
+		}
+
+		public long count() {
+			return count;
 		}
 	}
 
@@ -170,7 +187,8 @@ public final class LoadIntoTable implements AutoCloseable {
 		final String tableName = tableName(predicate, namespaces, subjectKind, objectKind, lang, datatype);
 		this.table = makeTable(predicate, subjectColumns, objectColumns, tableName);
 		if (masterConn instanceof DuckDBConnection) {
-			this.inserter = new DuckDbInserter((DuckDBConnection) ((DuckDBConnection) masterConn).duplicate());
+			this.inserter = new DuckDbInserter((DuckDBConnection) ((DuckDBConnection) masterConn).duplicate(),
+					this.table.name());
 		} else {
 			this.inserter = new JdbcInserter(masterConn, this.table.name(), subjectColumns, objectColumns);
 		}
@@ -210,8 +228,8 @@ public final class LoadIntoTable implements AutoCloseable {
 	public void close() throws SQLException {
 		if (!closed) {
 			this.inserter.close();
+			logger.info("Closed " + table.name() + " now has " + this.inserter.count() + " rows");
 		}
-		logger.info("Closed " + table.name() + " now has " + c + " rows");
 		closed = true;
 	}
 
@@ -270,6 +288,7 @@ public final class LoadIntoTable implements AutoCloseable {
 			int tempGraphId = getTemporaryGraphId(statement);
 			write(subjectS, objectS, tempGraphId);
 		} else {
+			logger.error("Statement without an attached graph.");
 			Loader.Failures.NO_GRAPH.exit();
 		}
 	}
