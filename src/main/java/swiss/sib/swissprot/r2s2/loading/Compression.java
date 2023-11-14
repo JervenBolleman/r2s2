@@ -84,7 +84,7 @@ public enum Compression {
 			return pb;
 		}
 	},
-	NONE("") {
+	NONE("none") {
 
 		@Override
 		public InputStream decompress(File f) throws FileNotFoundException, IOException {
