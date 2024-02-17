@@ -6,6 +6,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -248,14 +250,15 @@ public class TableMergingConcurence {
 			return false;
 		}
 		try (Connection conn = openByJdbc(path); Statement statement = conn.createStatement()) {
+			Instant start = Instant.now();
 			String sql = "SELECT " + sc + " FROM " + t.name() + " GROUP BY " + sc + " HAVING (COUNT(*) > 1) LIMIT 1";
 			logger.info("Running " + sql);
 			try (ResultSet rs = statement.executeQuery(sql)) {
 				final boolean isAMergeCandidate = rs.next();
 				if (isAMergeCandidate) {
-					logger.info(t.name() + " is a merge candidate");
+					logger.info(t.name() + " is a merge candidate. Took : " + Duration.between(start, Instant.now()));
 				} else {
-					logger.info(t.name() + " is NOT a merge candidate");
+					logger.info(t.name() + " is NOT a merge candidate. Took : " + Duration.between(start, Instant.now()));
 				}
 				return isAMergeCandidate;
 			}
