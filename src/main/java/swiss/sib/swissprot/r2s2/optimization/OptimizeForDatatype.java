@@ -78,7 +78,7 @@ public class OptimizeForDatatype {
 	}
 
 	private static boolean noLeadingZerosAndAllNumbers(String tableName, String name, Connection conn) {
-		String sql = "SELECT EXISTS (SELECT " + name + " FROM " + tableName + " WHERE len(" + name + "::integer)=len("
+		String sql = "SELECT EXISTS (SELECT " + name + " FROM " + tableName + " WHERE len(cast(cast(" + name + " AS INTEGER) AS TEXT))=len("
 				+ name + "))";
 		try (Statement stat = conn.createStatement()) {
 			logger.info("RUNNING " + sql);
